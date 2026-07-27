@@ -1,0 +1,43 @@
+# Slack app manifest. Create the app from this at https://api.slack.com/apps.
+#
+# The scope list is deliberately minimal. Notably absent: `channels:history`,
+# `files:write`, `users:read` and anything granting access to workspace content
+# the bot has no reason to see.
+
+display_information:
+  name: passbot
+  description: Reads the machine readable zone from a document photo
+  long_description: >
+    Send passbot a photo of a passport in a direct message and it replies with
+    the decoded MRZ data. Images are processed in memory and are never stored,
+    written to disk, or logged. Results are only ever delivered privately to
+    the person who uploaded the image.
+  background_color: '#1f2933'
+
+features:
+  bot_user:
+    display_name: passbot
+    always_online: true
+  app_home:
+    home_tab_enabled: false
+    messages_tab_enabled: true
+    messages_tab_read_only_enabled: false
+
+oauth_config:
+  scopes:
+    bot:
+      - files:read # download the uploaded image
+      - chat:write # reply
+      - im:write # open a DM to reply in
+      - im:history # receive the upload event in a DM
+
+settings:
+  event_subscriptions:
+    bot_events:
+      - message.im
+  interactivity:
+    is_enabled: false
+  # Socket Mode: the app dials out to Slack, so there is no request URL to
+  # host and no inbound port to secure.
+  socket_mode_enabled: true
+  token_rotation_enabled: false

@@ -1,0 +1,29 @@
+# Local development: the OCR sidecar in a container, the bot on the host.
+#
+# This mirrors production topology (bot -> loopback -> sidecar) while leaving
+# the TypeScript side hot-reloadable via `npm run dev`.
+#
+#   docker compose up -d ocr
+#   npm run dev
+
+services:
+  ocr:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: python-build
+    command: >
+      uvicorn ocr.app.main:app --host 0.0.0.0 --port 8000 --reload
+    working_dir: /srv
+    volumes:
+      - ./ocr:/srv/ocr:ro
+    # Bound to loopback on the host as well — never expose this port.
+    ports:
+      - '127.0.0.1:8000:8000'
+    environment:
+      PYTHONUNBUFFERED: '1'
+    healthcheck:
+      test: ['CMD', 'python', '-c', "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5

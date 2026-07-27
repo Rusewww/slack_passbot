@@ -1,0 +1,30 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Secrets — never commit. Use `.env.example` as the template.
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# Never allow real document images into the repository. Test fixtures are
+# generated synthetically at test time; see docs/SECURITY.md.
+*.jpg
+*.jpeg
+*.png
+*.heic
+*.pdf
+!docs/assets/*.png
+
+# Local tooling
+.DS_Store
+coverage/
+*.log

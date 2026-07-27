@@ -1,0 +1,27 @@
+[project]
+name = "passbot-ocr"
+version = "0.1.0"
+description = "MRZ localisation and OCR sidecar for passbot"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "pydantic>=2.10",
+    # Headless build: no GUI/X11 dependencies, which keeps the image small.
+    "opencv-python-headless>=4.11",
+    "numpy>=2.1",
+    "pytesseract>=0.3.13",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3", "ruff>=0.9"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
