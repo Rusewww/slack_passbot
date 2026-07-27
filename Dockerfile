@@ -30,6 +30,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
+# Debian's python3.11 seeds a venv with setuptools 66.1.1, which carries
+# CVE-2024-6345 and CVE-2025-47273. Upgrading the seed packages is the fix;
+# they are build-time tooling and nothing here imports them at runtime.
+RUN pip install --no-cache-dir --upgrade pip setuptools
+
 # Keep this list in sync with ocr/pyproject.toml, which is authoritative.
 RUN pip install --no-cache-dir \
       "fastapi>=0.115" "uvicorn[standard]>=0.34" "pydantic>=2.10" \
@@ -55,6 +60,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # file into /usr/share/tesseract-ocr/5/tessdata/mrz.traineddata and the sidecar
 # picks it up automatically (see ocr/app/recognise.py). Without it the code
 # falls back to `eng` with the MRZ character whitelist.
+
+# Strip the package managers the base image ships. The container's only job is
+# `node dist/index.js` and `uvicorn` — npm, npx, corepack and yarn are never
+# invoked at runtime, but their bundled dependencies (tar, brace-expansion,
+# picomatch, sigstore) carry HIGH/CRITICAL CVEs that the vulnerability gate
+# rightly refuses to let through. Removing them is a real reduction in attack
+# surface, not a suppression: a package manager inside a production image is a
+# convenient way for an attacker with code execution to fetch a payload.
+RUN rm -rf /usr/local/lib/node_modules/npm \
+           /usr/local/lib/node_modules/corepack \
+           /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+           /opt/yarn-v* /usr/local/bin/yarn /usr/local/bin/yarnpkg
 
 COPY --from=python-build /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"

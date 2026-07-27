@@ -53,6 +53,13 @@ jobs:
           tags: passbot:ci
       # A vulnerable base image is the most likely way this service gets
       # compromised, so the build fails on anything HIGH or above.
+      #
+      # Note the operational consequence: this job can go red without any code
+      # change, when a new CVE is disclosed against something in the base
+      # image. That is intended — the response is to rebuild on an updated
+      # base, or to remove the offending component if it isn't needed at
+      # runtime (as the Dockerfile does for npm/yarn). Resist the urge to add
+      # blanket ignores; the gate is only worth having if red means something.
       - name: Scan
         uses: aquasecurity/trivy-action@v0.36.0
         with:
