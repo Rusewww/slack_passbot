@@ -86,6 +86,9 @@ Full detail and the threat model: [docs/SECURITY.md](docs/SECURITY.md).
 
 ## Running it
 
+**Full setup, deployment and troubleshooting: [docs/RUNNING.md](docs/RUNNING.md).**
+The quick version follows.
+
 Prerequisites: Node 22+, Python 3.11+, Tesseract 5, Docker (optional).
 
 ```bash
