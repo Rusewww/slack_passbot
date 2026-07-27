@@ -102,8 +102,11 @@ npm test
 ```
 
 ```bash
-cd ocr && pip install -e ".[dev]" && pytest
+cd ocr && pip install -e ".[dev]" && ruff check . && pytest
 ```
+
+Run `ruff check` as well as `pytest` — CI gates on both, and `ruff` runs first,
+so a lint error stops the tests from running at all.
 
 ### Slack app setup
 

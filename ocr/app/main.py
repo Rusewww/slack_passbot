@@ -19,7 +19,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 
 from . import recognise as engine
-from .preprocess import ImageTooLarge, UndecodableImage, build_candidates, decode
+from .preprocess import ImageTooLargeError, UndecodableImageError, build_candidates, decode
 from .schemas import CandidateOut, HealthOut, RecogniseOut
 
 DEFAULT_MAX_PIXELS = 40_000_000
@@ -53,10 +53,10 @@ async def recognise_endpoint(request: Request) -> Response:
 
     try:
         image = decode(body, max_pixels)
-    except ImageTooLarge as exc:
+    except ImageTooLargeError as exc:
         log.info("rejected oversized image: %s", exc)
         return JSONResponse({"detail": "image too large"}, status_code=413)
-    except UndecodableImage:
+    except UndecodableImageError:
         return JSONResponse({"detail": "undecodable image"}, status_code=415)
     finally:
         del body

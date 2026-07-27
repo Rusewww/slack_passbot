@@ -11,12 +11,15 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: python-build
+      # The runtime stage, not `python-build`: only the final stage has
+      # Tesseract installed, and a sidecar without it fails every upload.
+      target: runtime
+    # Overrides the image's CMD (which would also start the Node bot) so the
+    # container runs the sidecar alone and Node stays on the host under `npm run dev`.
     command: >
       uvicorn ocr.app.main:app --host 0.0.0.0 --port 8000 --reload
-    working_dir: /srv
     volumes:
-      - ./ocr:/srv/ocr:ro
+      - ./ocr:/app/ocr:ro
     # Bound to loopback on the host as well — never expose this port.
     ports:
       - '127.0.0.1:8000:8000'

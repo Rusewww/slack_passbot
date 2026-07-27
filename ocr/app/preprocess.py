@@ -38,11 +38,11 @@ TARGET_STRIP_HEIGHT = 220
 WORKING_WIDTH = 1600
 
 
-class ImageTooLarge(Exception):
+class ImageTooLargeError(Exception):
     """Raised when a decoded image exceeds the configured pixel budget."""
 
 
-class UndecodableImage(Exception):
+class UndecodableImageError(Exception):
     """Raised when the bytes are not a decodable raster image."""
 
 
@@ -63,12 +63,12 @@ def decode(data: bytes, max_pixels: int) -> np.ndarray:
     buffer = np.frombuffer(data, dtype=np.uint8)
     image = cv2.imdecode(buffer, cv2.IMREAD_COLOR)
     if image is None:
-        raise UndecodableImage("cv2 could not decode the supplied bytes")
+        raise UndecodableImageError("cv2 could not decode the supplied bytes")
 
     height, width = image.shape[:2]
     if height * width > max_pixels:
         del image
-        raise ImageTooLarge(f"{width}x{height} exceeds the {max_pixels} pixel budget")
+        raise ImageTooLargeError(f"{width}x{height} exceeds the {max_pixels} pixel budget")
 
     return image
 
