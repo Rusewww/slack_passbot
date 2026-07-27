@@ -12,8 +12,8 @@ import numpy as np
 import pytest
 
 from app.preprocess import (
-    ImageTooLarge,
-    UndecodableImage,
+    ImageTooLargeError,
+    UndecodableImageError,
     build_candidates,
     decode,
     locate_mrz,
@@ -50,12 +50,12 @@ class TestDecode:
         assert image.shape[:2] == (850, 1200)
 
     def test_rejects_non_image_bytes(self) -> None:
-        with pytest.raises(UndecodableImage):
+        with pytest.raises(UndecodableImageError):
             decode(b"not an image at all", max_pixels=10_000_000)
 
     def test_enforces_the_pixel_budget(self) -> None:
         # The guard that stops a small file from expanding into a huge allocation.
-        with pytest.raises(ImageTooLarge):
+        with pytest.raises(ImageTooLargeError):
             decode(encode(synthetic_passport()), max_pixels=1000)
 
 

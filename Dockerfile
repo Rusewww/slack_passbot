@@ -16,13 +16,21 @@ RUN npm run build && npm prune --omit=dev
 
 
 # ---------- Stage 2: Python dependencies ----------
-FROM python:3.12-slim-bookworm AS python-build
+# Built on the *same* base as the runtime stage on purpose. A virtualenv is
+# bound to the exact interpreter that created it — building it on
+# python:3.12-slim and copying it into an image whose `python3` is Debian's
+# 3.11 produces a venv whose symlinks and site-packages path point at an
+# interpreter that isn't there. The image builds green and then fails to start.
+FROM node:22-bookworm-slim AS python-build
 
-WORKDIR /build
-RUN python -m venv /opt/venv
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 python3-venv \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-COPY ocr/pyproject.toml ./
+# Keep this list in sync with ocr/pyproject.toml, which is authoritative.
 RUN pip install --no-cache-dir \
       "fastapi>=0.115" "uvicorn[standard]>=0.34" "pydantic>=2.10" \
       "opencv-python-headless>=4.11" "numpy>=2.1" "pytesseract>=0.3.13"
@@ -64,6 +72,7 @@ USER node
 
 ENV NODE_ENV=production \
     OCR_SIDECAR_URL=http://127.0.0.1:8000 \
+    PYTHONPATH=/app \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
