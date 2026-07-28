@@ -75,6 +75,54 @@ export function fillerRatio(line: string): number {
   return (line.match(/</g) ?? []).length / line.length;
 }
 
+/**
+ * Characters Tesseract most often emits in place of the filler `<`.
+ *
+ * Deliberately narrow. `S`, `C` and `R` also occur as filler misreads but are
+ * common name endings — `DENYS`, `IHOR` — and crediting a shortened reading on
+ * their account would corrupt real names. `K` is the dominant artifact by a
+ * wide margin.
+ */
+const FILLER_ARTIFACTS = new Set(['K', 'E', 'X']);
+
+/**
+ * Credits a reading whose only difference from another is one trailing filler
+ * artifact.
+ *
+ * When the padding after a name is misread, the first stray character attaches
+ * itself to the name: `MARIANA` becomes `MARIANAK`. Both readings then appear
+ * across variants, and plain majority can pick the wrong one. The prior that
+ * settles it is directional — OCR turns `<` into a letter far more readily
+ * than it drops a real letter — so the shorter reading inherits the weight of
+ * the longer one it prefixes.
+ *
+ * Applied to given names only. A surname is followed by `<<` and then more
+ * name, not by padding, so a surname ending in `K` — `KOVALCHUK` and the many
+ * Ukrainian surnames like it — is never this artifact and must not be eroded
+ * by this rule.
+ */
+function creditTrailingArtifacts(
+  entries: ReadonlyArray<{ value: string; weight: number }>,
+): Array<{ value: string; weight: number }> {
+  const totals = new Map<string, number>();
+  for (const { value, weight } of entries) {
+    totals.set(value, (totals.get(value) ?? 0) + weight);
+  }
+
+  const adjusted = new Map(totals);
+  for (const [longer, weight] of totals) {
+    const last = longer[longer.length - 1];
+    if (!last || !FILLER_ARTIFACTS.has(last)) continue;
+
+    const shorter = longer.slice(0, -1);
+    if (totals.has(shorter)) {
+      adjusted.set(shorter, (adjusted.get(shorter) ?? 0) + weight);
+    }
+  }
+
+  return [...adjusted].map(([value, weight]) => ({ value, weight }));
+}
+
 /** Picks the highest-weighted value for one field. */
 export function vote(entries: ReadonlyArray<{ value: string; weight: number }>): string {
   const totals = new Map<string, number>();
@@ -120,7 +168,9 @@ export function chooseNames(
   return {
     primaryIdentifier,
     secondaryIdentifier: vote(
-      scored.map(({ names, weight }) => ({ value: names.secondaryIdentifier, weight })),
+      creditTrailingArtifacts(
+        scored.map(({ names, weight }) => ({ value: names.secondaryIdentifier, weight })),
+      ),
     ),
   };
 }

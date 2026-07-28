@@ -77,7 +77,7 @@ function tryParse(lines: [string, string]): Td3ParseResult | null {
   }
 }
 
-interface Adjudicated {
+export interface Adjudicated {
   parsed: { fields: MrzFields; validation: MrzValidation };
   format: MrzFormat;
   edits: number;
@@ -102,19 +102,44 @@ interface Adjudicated {
  * line 1, and the check digits will happily certify the pair — because they
  * never looked at line 1.
  */
-function adjudicateTd3(pool: readonly string[]): Adjudicated | null {
+function adjudicateTd3(
+  pool: readonly string[],
+  supportOf: (line: string) => number,
+): Adjudicated | null {
   const lines = pool.filter((line) => line.length === TD3_LINE_LENGTH);
   if (lines.length === 0) return null;
 
-  // --- Line 2, first pass: a reading every check digit accepts -------------
-  let line2: { value: string; edits: number } | null = null;
+  // --- Line 2, first pass: readings every check digit accepts --------------
+  //
+  // Every fully-valid reading is collected and the most frequent one wins,
+  // rather than the first that happens to validate. That matters because
+  // validating is not the same as being right: a check digit cannot see a
+  // substitution that shifts a character's value by a multiple of 10, which is
+  // precisely the digit/letter class `0↔A` … `9↔J`. A variant reading `6` for
+  // `G` validates perfectly, so arithmetic cannot rule it out and only
+  // agreement between variants can.
+  const validated = new Map<string, { count: number; edits: number }>();
   for (const line of lines) {
     const repaired = repairLine2(line);
     if (!repaired) continue;
-    if (line2 === null || repaired.edits < line2.edits) {
-      line2 = { value: repaired.line2, edits: repaired.edits };
+
+    const seen = validated.get(repaired.line2);
+    if (seen) {
+      seen.count += supportOf(line);
+      seen.edits = Math.min(seen.edits, repaired.edits);
+    } else {
+      validated.set(repaired.line2, { count: supportOf(line), edits: repaired.edits });
     }
-    if (repaired.edits === 0) break;
+  }
+
+  let line2: { value: string; edits: number } | null = null;
+  let bestCount = 0;
+  for (const [value, { count, edits }] of validated) {
+    // Most agreement wins; the fewest corrections breaks a tie.
+    if (count > bestCount || (count === bestCount && line2 !== null && edits < line2.edits)) {
+      line2 = { value, edits };
+      bestCount = count;
+    }
   }
 
   // --- Line 2, second pass: salvage whatever is provable ------------------
@@ -143,7 +168,7 @@ function adjudicateTd3(pool: readonly string[]): Adjudicated | null {
 
   // --- Line 1: plausible only ---------------------------------------------
   const nationality = line2.value.slice(10, 13).replace(/<+$/, '');
-  const line1Fields = chooseLine1Fields(pool, nationality);
+  const line1Fields = chooseLine1Fields(pool, nationality, supportOf);
   if (!line1Fields) return null;
 
   const parsed = tryParse([buildLine1(line1Fields), line2.value]);
@@ -165,21 +190,40 @@ function adjudicateTd3(pool: readonly string[]): Adjudicated | null {
  * The name line is then chosen by consensus, for the same reason as TD3 line
  * 1: it carries no check digit.
  */
-function adjudicateTd1(pool: readonly string[]): Adjudicated | null {
+function adjudicateTd1(
+  pool: readonly string[],
+  supportOf: (line: string) => number,
+): Adjudicated | null {
   const lines = pool.filter((line) => line.length === TD1_LINE_LENGTH);
   if (lines.length < 2) return null;
 
-  let pair: Td1Repair | null = null;
+  // Same consensus rule as TD3: collect every pairing the check digits accept
+  // and take the most frequent, because validating does not imply correct.
+  const validated = new Map<string, { pair: Td1Repair; count: number }>();
   for (const upper of lines) {
     for (const middle of lines) {
       if (upper === middle) continue;
 
       const repaired = repairTd1Lines(upper, middle);
       if (!repaired) continue;
-      if (pair === null || repaired.edits < pair.edits) pair = repaired;
-      if (repaired.edits === 0) break;
+
+      // A pairing is supported by a variant only if that variant produced both
+      // lines, so the weaker of the two is the honest measure.
+      const backing = Math.min(supportOf(upper), supportOf(middle));
+      const key = `${repaired.upper}\n${repaired.middle}`;
+      const seen = validated.get(key);
+      if (seen) seen.count += backing;
+      else validated.set(key, { pair: repaired, count: backing });
     }
-    if (pair?.edits === 0) break;
+  }
+
+  let pair: Td1Repair | null = null;
+  let bestCount = 0;
+  for (const { pair: candidate, count } of validated.values()) {
+    if (count > bestCount || (count === bestCount && pair !== null && candidate.edits < pair.edits)) {
+      pair = candidate;
+      bestCount = count;
+    }
   }
 
   // Same fallback as TD3: when no pairing validates completely, keep the one
@@ -231,9 +275,20 @@ function adjudicateTd1(pool: readonly string[]): Adjudicated | null {
  * fall through to the second attempt. A document is only ever one of the two,
  * so the order affects speed and nothing else.
  */
-function adjudicate(candidates: SidecarCandidate[]): Adjudicated | null {
-  const pool = [...new Set(candidates.flatMap((candidate) => candidate.lines))];
-  return adjudicateTd3(pool) ?? adjudicateTd1(pool);
+export function adjudicate(candidates: SidecarCandidate[]): Adjudicated | null {
+  // How many variants produced each line. Deduplicating outright would be
+  // fatal here: agreement between variants is the whole basis of the vote, and
+  // a Set throws exactly that information away.
+  const support = new Map<string, number>();
+  for (const line of candidates.flatMap((candidate) => candidate.lines)) {
+    support.set(line, (support.get(line) ?? 0) + 1);
+  }
+
+  // Distinct lines for the search, multiplicity for the counting.
+  const pool = [...support.keys()];
+  const supportOf = (line: string): number => support.get(line) ?? 1;
+
+  return adjudicateTd3(pool, supportOf) ?? adjudicateTd1(pool, supportOf);
 }
 
 /**

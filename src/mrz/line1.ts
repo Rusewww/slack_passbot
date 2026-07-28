@@ -89,11 +89,15 @@ export function scoreLine1(line: string, fields: Line1Fields, nationality: strin
 export function chooseLine1Fields(
   candidateLines: readonly string[],
   nationality: string,
+  /** How many variants produced each line; agreement is evidence. */
+  supportOf: (line: string) => number = () => 1,
 ): Line1Fields | null {
   const scored = candidateLines
     .map((line) => {
       const fields = extractLine1(line);
-      return fields ? { line, fields, weight: scoreLine1(line, fields, nationality) } : null;
+      return fields
+        ? { line, fields, weight: scoreLine1(line, fields, nationality) * supportOf(line) }
+        : null;
     })
     .filter((entry): entry is { line: string; fields: Line1Fields; weight: number } => entry !== null);
 
