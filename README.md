@@ -35,6 +35,19 @@ ambiguous glyph is usually solvable algebraically from the check digits rather
 than by asking a bigger model. A result is only ever returned if all five check
 digits verify — the bot reports failure rather than a reading it cannot prove.
 
+### What the check digits do *not* cover
+
+All five check digits live on **line 2**. The document code, issuing state and
+the holder's **name** are on line 1, which ICAO gives no check digit of any
+kind. Those fields cannot be proven, only judged plausible.
+
+They are therefore reconstructed differently: the OCR sidecar returns one
+reading per preprocessing variant, and line 1 is rebuilt field-by-field by
+weighted majority across all of them, weighted by structural plausibility
+(see [`src/mrz/line1.ts`](src/mrz/line1.ts)). It is redundancy standing in for
+proof, and it is genuinely weaker — a name is a best reading, not a verified
+one, and the reply says so.
+
 ## Architecture
 
 ```

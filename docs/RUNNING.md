@@ -167,19 +167,19 @@ channel can see it. To allow specific channels, set `INTAKE_MODE=allowlist` and
 ```
 P/UKR/XX000000/UKR/24AUG91/F/25SEP23/TKACHENKO/MARIANA
 ```
-Document code  `P`
-Issuing state  `UKR`
-Document no.   `XX000000`
-Nationality    `UKR`
-Sex            `F`
-
-All check digits verified · direct read · Not stored — this message is the only copy.
+Number and dates check-digit verified · name unverified · direct read · Not stored — this message is the only copy.
 ````
 
 If the photo needed correcting you will see `read with check-digit correction`
 and how many characters were repaired. If the check digits cannot be satisfied
 the bot reports failure rather than a reading it cannot prove — that is working
 as intended, not a bug.
+
+**"name unverified" is literal, not boilerplate.** Every TD3 check digit is
+computed over line 2, so the document number, dates and sex are provable. The
+name lives on line 1, which has no check digit at all; it is reconstructed by
+majority vote across the OCR variants and can still be wrong. Check the name
+against the document by eye before relying on it.
 
 ---
 

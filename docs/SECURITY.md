@@ -42,6 +42,14 @@ refuses to emit a result unless every check digit verifies, and the vision
 fallback is held to the identical standard — a hallucinated document number
 fails the arithmetic and is discarded rather than delivered.
 
+**The guarantee stops at line 2.** All five check digits are computed over it,
+so the document number, dates, sex and personal number are provable. The
+document code, issuing state and the holder's name are on line 1, which ICAO
+gives no check digit; they are reconstructed by weighted majority across the
+OCR variants and can still be wrong. The reply labels them `name unverified`
+for that reason. Treat a returned name as a best reading requiring human
+confirmation, not as verified data.
+
 The user-facing failure message says so explicitly, because "I could not read
 this" is a safe outcome and "probably TKACHENKO" is not.
 

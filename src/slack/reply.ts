@@ -29,17 +29,11 @@ const FAILURE_MESSAGE: Record<ExtractionFailureReason, string> = {
 };
 
 export function successBlocks(result: ExtractionSuccess): KnownBlock[] {
-  const f = result.fields;
-  const details = [
-    `*Document code*  \`${f.documentCode}\``,
-    `*Issuing state*  \`${f.issuingState}\``,
-    `*Document no.*  \`${f.documentNumber}\``,
-    `*Nationality*  \`${f.nationality}\``,
-    `*Sex*  \`${f.sex}\``,
-  ].join('\n');
-
+  // Deliberately precise about the limit of the guarantee: the check digits
+  // cover line 2 only. The name comes from line 1, which ICAO gives no check
+  // digit, so it is a best reading rather than a verified one.
   const context = [
-    `All check digits verified · ${SOURCE_LABEL[result.source]}`,
+    `Number and dates check-digit verified · name unverified · ${SOURCE_LABEL[result.source]}`,
     result.edits > 0 ? `${result.edits} character(s) corrected` : null,
     'Not stored — this message is the only copy.',
   ]
@@ -51,7 +45,6 @@ export function successBlocks(result: ExtractionSuccess): KnownBlock[] {
       type: 'section',
       text: { type: 'mrkdwn', text: `\`\`\`\n${result.formatted}\n\`\`\`` },
     },
-    { type: 'section', text: { type: 'mrkdwn', text: details } },
     { type: 'context', elements: [{ type: 'mrkdwn', text: context }] },
   ];
 }

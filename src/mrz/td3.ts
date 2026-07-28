@@ -146,6 +146,40 @@ export function compositeInput(line2: string): string {
   return line2.slice(0, 10) + line2.slice(13, 20) + line2.slice(21, 43);
 }
 
+/**
+ * Verifies every check digit in a TD3 MRZ.
+ *
+ * Note what is absent: all five check digits live on line 2. The document
+ * code, issuing state and the holder's name — the whole of line 1 — carry no
+ * check digit of any kind, so nothing here says anything about them. Line 1
+ * has to be judged plausible instead; see `line1.ts`.
+ */
+export function validateLine2(line2: string): Td3Validation {
+  const o2 = TD3_OFFSETS.line2;
+  const documentNumberRaw = slice(line2, o2.documentNumber);
+  const birthDate = slice(line2, o2.birthDate);
+  const expiryDate = slice(line2, o2.expiryDate);
+  const personalNumberRaw = slice(line2, o2.personalNumber);
+
+  const validation: Td3Validation = {
+    documentNumber: verifyCheckDigit(documentNumberRaw, slice(line2, o2.documentNumberCheck)),
+    birthDate: verifyCheckDigit(birthDate, slice(line2, o2.birthDateCheck)),
+    expiryDate: verifyCheckDigit(expiryDate, slice(line2, o2.expiryDateCheck)),
+    personalNumber: verifyCheckDigit(personalNumberRaw, slice(line2, o2.personalNumberCheck)),
+    composite:
+      computeCheckDigit(compositeInput(line2)) === Number(slice(line2, o2.compositeCheck)),
+    allValid: false,
+  };
+  validation.allValid =
+    validation.documentNumber &&
+    validation.birthDate &&
+    validation.expiryDate &&
+    validation.personalNumber &&
+    validation.composite;
+
+  return validation;
+}
+
 export function parseTd3(line1: string, line2: string): Td3ParseResult {
   for (const [index, line] of [line1, line2].entries()) {
     if (line.length !== TD3_LINE_LENGTH) {
@@ -165,14 +199,9 @@ export function parseTd3(line1: string, line2: string): Td3ParseResult {
   const [primaryRaw = '', secondaryRaw = ''] = names.split('<<', 2);
 
   const documentNumberRaw = slice(line2, o2.documentNumber);
-  const documentNumberCheck = slice(line2, o2.documentNumberCheck);
   const birthDate = slice(line2, o2.birthDate);
-  const birthDateCheck = slice(line2, o2.birthDateCheck);
   const expiryDate = slice(line2, o2.expiryDate);
-  const expiryDateCheck = slice(line2, o2.expiryDateCheck);
   const personalNumberRaw = slice(line2, o2.personalNumber);
-  const personalNumberCheck = slice(line2, o2.personalNumberCheck);
-  const statedComposite = slice(line2, o2.compositeCheck);
 
   // NOTE: ICAO allows document numbers longer than 9 characters, in which case
   // position 10 is `<` and the remainder overflows into the personal number
@@ -191,20 +220,5 @@ export function parseTd3(line1: string, line2: string): Td3ParseResult {
     personalNumber: trimFiller(personalNumberRaw),
   };
 
-  const validation: Td3Validation = {
-    documentNumber: verifyCheckDigit(documentNumberRaw, documentNumberCheck),
-    birthDate: verifyCheckDigit(birthDate, birthDateCheck),
-    expiryDate: verifyCheckDigit(expiryDate, expiryDateCheck),
-    personalNumber: verifyCheckDigit(personalNumberRaw, personalNumberCheck),
-    composite: computeCheckDigit(compositeInput(line2)) === Number(statedComposite),
-    allValid: false,
-  };
-  validation.allValid =
-    validation.documentNumber &&
-    validation.birthDate &&
-    validation.expiryDate &&
-    validation.personalNumber &&
-    validation.composite;
-
-  return { fields, validation, lines: [line1, line2] };
+  return { fields, validation: validateLine2(line2), lines: [line1, line2] };
 }

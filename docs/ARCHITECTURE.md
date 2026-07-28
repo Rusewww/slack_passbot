@@ -14,6 +14,9 @@ verification. Three consequences follow:
 
 1. **Acceptance is binary, not probabilistic.** A result is returned only if
    all five check digits verify. Confidence scores are never consulted.
+   Note the scope: every check digit is computed over **line 2**. Line 1 —
+   document code, issuing state, name — has none, and is handled separately
+   (see [Line 1 has no check digits](#line-1-has-no-check-digits)).
 2. **Repair is safe and fast.** OCR-B produces a small set of glyph confusions.
    Enumerating them and keeping only readings that satisfy the check digits
    recovers most imperfect scans in microseconds of CPU — no model call.
@@ -50,6 +53,37 @@ would duplicate the MRZ specification in two languages, which is exactly the
 kind of logic that drifts. Validation is a few microseconds of arithmetic, so
 running it over a handful of candidates in one place is negligible and keeps the
 standard implemented once.
+
+### Line 1 has no check digits
+
+This is the most important asymmetry in the system, and it is easy to miss:
+**every ICAO 9303 TD3 check digit is computed over line 2.** The document
+number, dates, sex and personal number are provable. The document code, issuing
+state, surname and given names — all of line 1 — are not covered by anything.
+
+Selecting both lines together from whichever preprocessing variant happened to
+parse is therefore a mistake, and was a real defect: a variant can produce a
+flawless line 2 and a badly corrupted line 1, and the check digits will
+certify the pair, because they never looked at line 1. The failure is silent
+and confident, which is the worst kind.
+
+The two lines are now chosen independently from a pool of every line every
+variant produced:
+
+| | Line 2 | Line 1 |
+| --- | --- | --- |
+| Guarantee | provable | plausible only |
+| Method | check digits, plus confusion repair | weighted majority vote per field |
+| Chosen by | fewest substitutions among fully-valid candidates | structural score: `<` in the document code, issuing state matching nationality, filler ratio |
+
+Voting works because the sidecar hands back several independent readings of the
+same strip. Errors differ between them; the truth repeats. The dominant error
+is the filler `<` being read as `K`, `E` or `S` — the stock `eng` Tesseract
+model has no OCR-B chevron — and since line 1 is mostly filler, that noise
+lands in the padding after the name, where per-field voting discards it.
+
+This is weaker than proof and should not be described as if it were. Installing
+the OCR-B model (below) is the real fix for the underlying cause.
 
 ### Why one container, two processes
 

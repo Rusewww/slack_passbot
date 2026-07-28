@@ -16,8 +16,9 @@
 import type { Logger } from 'pino';
 
 import { formatPassbotLine } from '../mrz/format.js';
-import { repairTd3 } from '../mrz/repair.js';
-import { extractTd3Lines, parseTd3, Td3FormatError, type Td3ParseResult } from '../mrz/td3.js';
+import { buildLine1, chooseLine1Fields } from '../mrz/line1.js';
+import { repairLine2, repairTd3 } from '../mrz/repair.js';
+import { parseTd3, Td3FormatError, TD3_LINE_LENGTH, type Td3ParseResult } from '../mrz/td3.js';
 import { FallbackUnsupported, recogniseWithVision } from '../ocr/fallback.js';
 import {
   recognise,
@@ -57,36 +58,53 @@ function tryParse(lines: [string, string]): Td3ParseResult | null {
 interface Adjudicated {
   parsed: Td3ParseResult;
   edits: number;
-  variant: string;
 }
 
 /**
  * Picks the best reading across all preprocessing variants.
  *
- * Exact reads win outright. Otherwise the repaired candidate needing the
- * fewest substitutions wins — every candidate considered here has already
- * satisfied all five check digits, so the tie-break is about which is most
- * faithful to what the camera saw, not about which is more likely correct.
+ * The two MRZ lines are chosen **independently**, from a pooled set of every
+ * line every variant produced. That asymmetry is deliberate and is the point
+ * of this function:
+ *
+ *   - Line 2 carries all five check digits, so a candidate can be *proven*
+ *     correct. Exact reads win outright; otherwise the repaired candidate
+ *     needing the fewest substitutions wins.
+ *   - Line 1 carries no check digit at all, so no candidate can be proven.
+ *     It is reconstructed field-by-field by weighted majority across every
+ *     variant (see `mrz/line1.ts`).
+ *
+ * Selecting both lines from whichever single variant happened to parse is what
+ * this replaces. A variant can produce a flawless line 2 and a badly corrupted
+ * line 1, and the check digits will happily certify the pair — because they
+ * never looked at line 1.
  */
 function adjudicate(candidates: SidecarCandidate[]): Adjudicated | null {
-  let best: Adjudicated | null = null;
+  const pool = [...new Set(candidates.flatMap((candidate) => candidate.lines))];
 
-  for (const candidate of candidates) {
-    const lines = extractTd3Lines(candidate.lines.join('\n'));
-    if (!lines) continue;
+  // --- Line 2: provable ---------------------------------------------------
+  let line2: { value: string; edits: number } | null = null;
+  for (const line of pool) {
+    if (line.length !== TD3_LINE_LENGTH) continue;
 
-    const parsed = tryParse(lines);
-    if (parsed?.validation.allValid) {
-      return { parsed, edits: 0, variant: candidate.variant };
+    const repaired = repairLine2(line);
+    if (!repaired) continue;
+    if (line2 === null || repaired.edits < line2.edits) {
+      line2 = { value: repaired.line2, edits: repaired.edits };
     }
-
-    const repaired = repairTd3(lines[0], lines[1]);
-    if (repaired && (best === null || repaired.edits < best.edits)) {
-      best = { parsed: repaired.parsed, edits: repaired.edits, variant: candidate.variant };
-    }
+    if (repaired.edits === 0) break;
   }
+  if (!line2) return null;
 
-  return best;
+  // --- Line 1: plausible only ---------------------------------------------
+  const nationality = line2.value.slice(10, 13).replace(/<+$/, '');
+  const line1Fields = chooseLine1Fields(pool, nationality);
+  if (!line1Fields) return null;
+
+  const parsed = tryParse([buildLine1(line1Fields), line2.value]);
+  if (!parsed?.validation.allValid) return null;
+
+  return { parsed, edits: line2.edits };
 }
 
 export async function extractMrz(image: ImageInput, deps: PipelineDeps): Promise<ExtractionResult> {
@@ -102,8 +120,12 @@ export async function extractMrz(image: ImageInput, deps: PipelineDeps): Promise
 
     const winner = adjudicate(result.candidates);
     if (winner) {
-      log.info({ variant: winner.variant, edits: winner.edits }, 'MRZ accepted');
-      return accept(winner.parsed, winner.edits === 0 ? 'tesseract' : 'tesseract+repair', winner.edits);
+      log.info({ edits: winner.edits }, 'MRZ accepted');
+      return accept(
+        winner.parsed,
+        winner.edits === 0 ? 'tesseract' : 'tesseract+repair',
+        winner.edits,
+      );
     }
   } catch (error) {
     if (error instanceof SidecarRejected) {
