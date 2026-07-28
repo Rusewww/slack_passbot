@@ -87,7 +87,14 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 # Unprivileged user. `node` (uid 1000) already exists in the base image.
 USER node
 
+# Baked in so a running container can report which commit it is. Without this
+# a stale image is indistinguishable from a broken fix — which has already
+# cost one round of misdiagnosis. Pass with
+# `docker build --build-arg BUILD_COMMIT=$(git rev-parse HEAD)`.
+ARG BUILD_COMMIT=unknown
+
 ENV NODE_ENV=production \
+    BUILD_COMMIT=${BUILD_COMMIT} \
     OCR_SIDECAR_URL=http://127.0.0.1:8000 \
     PYTHONPATH=/app \
     PYTHONDONTWRITEBYTECODE=1 \

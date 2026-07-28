@@ -52,20 +52,68 @@ export function nameComponents(field: string): { surname: string; given: string[
   return { surname, given: substantial.length > 0 ? substantial : rest };
 }
 
-/** Reads a name field, or null when it cannot be one. */
+/**
+ * Plausibility bounds for a name.
+ *
+ * ICAO gives the whole name field 39 characters on TD3 and 30 on TD1, so a
+ * single component longer than this is not a name — it is a run of
+ * misrecognised padding. Nor does an MRZ carry five given names; the field is
+ * truncated long before that.
+ */
+const MAX_COMPONENT_LENGTH = 26;
+const MAX_GIVEN_NAMES = 4;
+
+/** A name is letters. Nothing else belongs in one. */
+const NAME_COMPONENT = /^[A-Z]+$/;
+
+/** Beyond this length, a component of one repeated letter is noise, not a name. */
+const MAX_REPEATED_RUN = 3;
+
+/**
+ * True for a component that is the same letter over and over — `KKKKKKKK`.
+ *
+ * This is what misread padding looks like once it has been mistaken for a
+ * name, and no real name resembles it. Short repeats are left alone so that
+ * nothing legitimate is caught.
+ */
+function isRepeatedLetter(component: string): boolean {
+  return component.length > MAX_REPEATED_RUN && new Set(component).size === 1;
+}
+
+/**
+ * Reads a name field, or null when it cannot be one.
+ *
+ * Every component is checked, not only the surname. That distinction caused a
+ * real failure twice over: readings of `EVA ERI LEILAKKK6660CKREKKKKRKCK` and
+ * `KKKKKKKKKKKKKKKK` were both accepted and delivered as names, because only
+ * the surname had ever been tested for being alphabetic.
+ *
+ * Rejecting here is safe in a way that guessing is not. The name is the one
+ * part of an MRZ no check digit protects, so a reading that fails these basic
+ * structural tests is the only evidence available that it is wrong — and it is
+ * conclusive evidence. Digits do not occur in names.
+ */
 export function extractNames(field: string): NameFields | null {
   // Every name field separates surname from given names with `<<`. Without it
   // this is visual-zone text the recogniser picked up by accident.
   if (!field.includes('<<')) return null;
 
   const components = nameComponents(field);
-  if (!components || components.surname.length < 2) return null;
-  // A name is letters. Digits mean this is a different MRZ line entirely.
-  if (!/^[A-Z]+$/.test(components.surname)) return null;
+  if (!components) return null;
+
+  const { surname, given } = components;
+  if (surname.length < 2) return null;
+  if (given.length > MAX_GIVEN_NAMES) return null;
+
+  for (const component of [surname, ...given]) {
+    if (!NAME_COMPONENT.test(component)) return null;
+    if (component.length > MAX_COMPONENT_LENGTH) return null;
+    if (isRepeatedLetter(component)) return null;
+  }
 
   return {
-    primaryIdentifier: components.surname,
-    secondaryIdentifier: components.given.join(' '),
+    primaryIdentifier: surname,
+    secondaryIdentifier: given.join(' '),
   };
 }
 

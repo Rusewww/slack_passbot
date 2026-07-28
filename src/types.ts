@@ -14,6 +14,11 @@ export interface ExtractionSuccess {
    */
   validation: Td3Validation;
   format: MrzFormat;
+  /**
+   * Problems no check digit can express — a document number that does not fit
+   * its issuer's known format, for instance. Shown to the user as warnings.
+   */
+  anomalies: string[];
   source: ExtractionSource;
   /** Character substitutions applied by check-digit repair, if any. */
   edits: number;
@@ -27,6 +32,8 @@ export type ExtractionFailureReason =
   | 'check_digits_failed'
   /** MRZ-shaped lines were found, but in a layout this bot does not decode. */
   | 'unsupported_mrz'
+  /** The numeric fields read, but no line yielded a plausible name. */
+  | 'name_unreadable'
   | 'unsupported_format'
   | 'too_large'
   | 'ocr_unavailable'

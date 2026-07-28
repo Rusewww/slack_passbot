@@ -3,6 +3,7 @@
  * up, so the bot is never online-but-broken from a user's point of view.
  */
 
+import { buildInfo } from './buildInfo.js';
 import { loadConfig } from './config.js';
 import { createLogger } from './logger.js';
 import { healthy } from './ocr/sidecar.js';
@@ -11,6 +12,10 @@ import { createApp } from './slack/app.js';
 async function main(): Promise<void> {
   const config = loadConfig();
   const logger = createLogger(config.LOG_LEVEL, config.NODE_ENV);
+
+  // First line in the log, deliberately: when behaviour does not match the
+  // source, this is the fact that settles it.
+  logger.info(buildInfo(), 'build');
 
   if (!(await healthy(config.OCR_SIDECAR_URL))) {
     logger.warn(

@@ -13,6 +13,7 @@ function build(line2: string, format: ExtractionSuccess['format'] = 'TD3'): Extr
     fields: parsed.fields,
     validation: parsed.validation,
     format,
+    anomalies: [],
     source: 'tesseract',
     edits: 0,
     formatted: formatPassbotLine(parsed.fields),

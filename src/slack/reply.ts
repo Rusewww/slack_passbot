@@ -7,6 +7,7 @@
 
 import type { KnownBlock } from '@slack/types';
 
+import { buildLabel } from '../buildInfo.js';
 import type { ExtractionFailureReason, ExtractionSuccess } from '../types.js';
 
 const SOURCE_LABEL: Record<ExtractionSuccess['source'], string> = {
@@ -26,6 +27,8 @@ const FAILURE_MESSAGE: Record<ExtractionFailureReason, string> = {
   // too damaged to identify.
   check_digits_failed:
     'I found the MRZ but could not make out enough of it to report anything — the name line in particular was unreadable. Please retake the photo straight-on, with the whole bottom strip in focus.',
+  name_unreadable:
+    'I read the document number and dates, but nothing on the name line was legible enough to be a name. Rather than report characters I know are wrong, I am reporting nothing. Please retake the photo with the whole bottom strip sharp and evenly lit.',
   unsupported_mrz:
     'I found a machine readable zone, but not in a layout I decode. I read passports (TD3: two lines of 44 characters) and identity cards (TD1: three lines of 30). Visas and older card formats are not supported yet.',
   unsupported_format: 'That file type is not supported. Send a JPEG, PNG or HEIC photo.',
@@ -66,7 +69,23 @@ export function successBlocks(result: ExtractionSuccess): KnownBlock[] {
   const blocks: KnownBlock[] = [];
   const { verified, failed } = verificationBreakdown(result);
 
-  // The warning goes first, so it cannot be missed by someone who copies the
+  // Anomalies come first: an issuer-format mismatch means a field is wrong in
+  // a way the check digits are structurally unable to detect, which is more
+  // serious than a check digit that simply failed.
+  if (result.anomalies.length > 0) {
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: [
+          ':rotating_light: *This reading is suspect beyond what the check digits can tell you.*',
+          ...result.anomalies.map((anomaly) => `• ${anomaly}`),
+        ].join('\n'),
+      },
+    });
+  }
+
+  // The warning goes next, so it cannot be missed by someone who copies the
   // string straight out of the code block.
   if (!result.validation.allValid) {
     blocks.push({
@@ -109,6 +128,8 @@ export function successBlocks(result: ExtractionSuccess): KnownBlock[] {
     `${status} · name never check-digit protected · ${SOURCE_LABEL[result.source]}`,
     result.edits > 0 ? `${result.edits} character(s) corrected` : null,
     'Not stored — this message is the only copy.',
+    // So a stale binary announces itself instead of being blamed on the code.
+    `build ${buildLabel()}`,
   ]
     .filter(Boolean)
     .join(' · ');

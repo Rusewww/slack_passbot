@@ -17,6 +17,7 @@ import type { Logger } from 'pino';
 
 import type { MrzFields, MrzFormat, MrzValidation } from '../mrz/fields.js';
 import { formatPassbotLine } from '../mrz/format.js';
+import { matchesRule, repairToIssuerFormat, ruleFor } from '../mrz/issuers.js';
 import { buildLine1, chooseLine1Fields } from '../mrz/line1.js';
 import { chooseNames } from '../mrz/names.js';
 import {
@@ -55,12 +56,14 @@ function accept(
   source: ExtractionSource,
   edits: number,
   format: MrzFormat,
+  anomalies: string[] = [],
 ): ExtractionResult {
   return {
     ok: true,
     fields: parsed.fields,
     validation: parsed.validation,
     format,
+    anomalies,
     source,
     edits,
     formatted: formatPassbotLine(parsed.fields),
@@ -81,6 +84,49 @@ export interface Adjudicated {
   parsed: { fields: MrzFields; validation: MrzValidation };
   format: MrzFormat;
   edits: number;
+  /** Things worth telling the user that the check digits cannot express. */
+  anomalies: string[];
+}
+
+/**
+ * Reconciles the document number with its issuer's known format, where one is
+ * known.
+ *
+ * This is the only mechanism in the system that can correct a substitution the
+ * check digits are blind to — the digit/letter class `0↔A` … `9↔J`. A rule is
+ * applied only when the issuer is recognised, so documents from elsewhere pass
+ * through untouched.
+ *
+ * A number that cannot be reconciled is left exactly as read and reported as
+ * an anomaly; silently "fixing" it to fit a pattern would be inventing data.
+ */
+function applyIssuerFormat(
+  line2: string,
+  nationality: string,
+  format: MrzFormat,
+  anomalies: string[],
+): string {
+  const rule = ruleFor(nationality, format);
+  if (!rule) return line2;
+
+  const span = format === 'TD3' ? ([0, 9] as const) : ([5, 14] as const);
+  const checkAt = format === 'TD3' ? ([9, 10] as const) : ([14, 15] as const);
+
+  const field = line2.slice(span[0], span[1]);
+  if (matchesRule(field, rule)) return line2;
+
+  const candidates = repairToIssuerFormat(field, line2.slice(checkAt[0], checkAt[1]), rule);
+
+  if (candidates.length === 1) {
+    return line2.slice(0, span[0]) + candidates[0] + line2.slice(span[1]);
+  }
+
+  anomalies.push(
+    candidates.length === 0
+      ? `the document number does not match the expected ${nationality} format (${rule.description}) and could not be reconciled with its check digit`
+      : `the document number is ambiguous: ${candidates.length} readings fit both the ${nationality} format and the check digit`,
+  );
+  return line2;
 }
 
 /**
@@ -105,6 +151,7 @@ export interface Adjudicated {
 function adjudicateTd3(
   pool: readonly string[],
   supportOf: (line: string) => number,
+  nameFailed: { value: boolean },
 ): Adjudicated | null {
   const lines = pool.filter((line) => line.length === TD3_LINE_LENGTH);
   if (lines.length === 0) return null;
@@ -166,15 +213,25 @@ function adjudicateTd3(
     line2 = { value: best.value, edits: best.edits };
   }
 
-  // --- Line 1: plausible only ---------------------------------------------
+  // --- Issuer format: reaches where the check digits cannot ----------------
   const nationality = line2.value.slice(10, 13).replace(/<+$/, '');
+  const anomalies: string[] = [];
+  line2.value = applyIssuerFormat(line2.value, nationality, 'TD3', anomalies);
+
+  // --- Line 1: plausible only ---------------------------------------------
+  // A null here means no candidate produced anything that could be a name.
+  // That is reported as its own failure rather than as a check-digit problem,
+  // because the numeric fields read perfectly well.
   const line1Fields = chooseLine1Fields(pool, nationality, supportOf);
-  if (!line1Fields) return null;
+  if (!line1Fields) {
+    nameFailed.value = true;
+    return null;
+  }
 
   const parsed = tryParse([buildLine1(line1Fields), line2.value]);
   if (!parsed) return null;
 
-  return { parsed, format: 'TD3', edits: line2.edits };
+  return { parsed, format: 'TD3', edits: line2.edits, anomalies };
 }
 
 /**
@@ -193,6 +250,7 @@ function adjudicateTd3(
 function adjudicateTd1(
   pool: readonly string[],
   supportOf: (line: string) => number,
+  nameFailed: { value: boolean },
 ): Adjudicated | null {
   const lines = pool.filter((line) => line.length === TD1_LINE_LENGTH);
   if (lines.length < 2) return null;
@@ -257,15 +315,22 @@ function adjudicateTd1(
     (line) => line !== pair.upper && line !== pair.middle && looksLikeNameLine(line),
   );
   const names = chooseNames(nameCandidates.map((field) => ({ field, weight: 1 })));
-  if (!names) return null;
+  if (!names) {
+    nameFailed.value = true;
+    return null;
+  }
 
   const nameLine = `${names.primaryIdentifier}<<${names.secondaryIdentifier.replace(/ /g, '<')}`
     .padEnd(TD1_LINE_LENGTH, '<')
     .slice(0, TD1_LINE_LENGTH);
 
-  const parsed = parseTd1(pair.upper, pair.middle, nameLine);
+  const anomalies: string[] = [];
+  const nationality = pair.middle.slice(15, 18).replace(/<+$/, '');
+  const upper = applyIssuerFormat(pair.upper, nationality, 'TD1', anomalies);
 
-  return { parsed, format: 'TD1', edits: pair.edits };
+  const parsed = parseTd1(upper, pair.middle, nameLine);
+
+  return { parsed, format: 'TD1', edits: pair.edits, anomalies };
 }
 
 /**
@@ -275,7 +340,11 @@ function adjudicateTd1(
  * fall through to the second attempt. A document is only ever one of the two,
  * so the order affects speed and nothing else.
  */
-export function adjudicate(candidates: SidecarCandidate[]): Adjudicated | null {
+export function adjudicate(candidates: SidecarCandidate[]): {
+  winner: Adjudicated | null;
+  /** True when the numeric fields read but no line yielded a plausible name. */
+  nameFailed: boolean;
+} {
   // How many variants produced each line. Deduplicating outright would be
   // fatal here: agreement between variants is the whole basis of the vote, and
   // a Set throws exactly that information away.
@@ -288,7 +357,9 @@ export function adjudicate(candidates: SidecarCandidate[]): Adjudicated | null {
   const pool = [...support.keys()];
   const supportOf = (line: string): number => support.get(line) ?? 1;
 
-  return adjudicateTd3(pool, supportOf) ?? adjudicateTd1(pool, supportOf);
+  const nameFailed = { value: false };
+  const winner = adjudicateTd3(pool, supportOf, nameFailed) ?? adjudicateTd1(pool, supportOf, nameFailed);
+  return { winner, nameFailed: nameFailed.value };
 }
 
 /**
@@ -324,7 +395,8 @@ export async function extractMrz(image: ImageInput, deps: PipelineDeps): Promise
     deterministicFailure = diagnose(result.candidates);
     log.debug({ variants: result.candidates.length, durationMs: result.durationMs }, 'sidecar done');
 
-    const winner = adjudicate(result.candidates);
+    const { winner, nameFailed } = adjudicate(result.candidates);
+    if (nameFailed) deterministicFailure = 'name_unreadable';
     if (winner) {
       log.info(
         {
@@ -339,6 +411,7 @@ export async function extractMrz(image: ImageInput, deps: PipelineDeps): Promise
         winner.edits === 0 ? 'tesseract' : 'tesseract+repair',
         winner.edits,
         winner.format,
+        winner.anomalies,
       );
     }
   } catch (error) {

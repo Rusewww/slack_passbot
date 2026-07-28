@@ -31,19 +31,31 @@ describe('adjudicate — line 2 by consensus', () => {
       variant('bottom:grey', LINE_1, LINE_2),
     ];
 
-    const result = adjudicate(candidates);
+    const { winner: result } = adjudicate(candidates);
 
     expect(result?.parsed.fields.documentNumber).toBe('GC000000');
     expect(formatPassbotLine(result!.parsed.fields)).toBe(EXPECTED);
   });
 
-  it('reports full validity for the misread when nothing contradicts it', () => {
-    // Honest about the limit: with a single variant there is no redundancy,
-    // the arithmetic is blind, and the wrong reading is returned as verified.
-    const result = adjudicate([variant('located:otsu', LINE_1, LINE_2_MISREAD)]);
+  it('corrects the misread from the issuer format even with a single variant', () => {
+    // No redundancy here, and the arithmetic is blind — but `6C000000` is not
+    // a shape Ukrainian passport numbers take, and exactly one reading fits
+    // both that shape and the check digit.
+    const { winner: result } = adjudicate([variant('located:otsu', LINE_1, LINE_2_MISREAD)]);
+
+    expect(result?.parsed.fields.documentNumber).toBe('GC000000');
+    expect(result?.parsed.validation.allValid).toBe(true);
+    expect(result?.anomalies).toEqual([]);
+  });
+
+  it('leaves an unknown issuer untouched and says nothing about it', () => {
+    // The rule table is deliberately narrow: a document from an issuer with no
+    // entry gets no constraint, so adding rules can never corrupt one.
+    const foreign = LINE_2_MISREAD.replace('UKR', 'DEU');
+    const { winner: result } = adjudicate([variant('located:otsu', LINE_1, foreign)]);
 
     expect(result?.parsed.fields.documentNumber).toBe('6C000000');
-    expect(result?.parsed.validation.allValid).toBe(true);
+    expect(result?.anomalies).toEqual([]);
   });
 
   it('prefers the majority even when the minority appears more often first', () => {
@@ -55,7 +67,7 @@ describe('adjudicate — line 2 by consensus', () => {
       variant('e', LINE_1, LINE_2),
     ];
 
-    expect(adjudicate(candidates)?.parsed.fields.documentNumber).toBe('GC000000');
+    expect(adjudicate(candidates).winner?.parsed.fields.documentNumber).toBe('GC000000');
   });
 });
 
@@ -67,7 +79,7 @@ describe('adjudicate — trailing name artifact', () => {
       variant('bottom:grey', LINE_1, LINE_2),
     ];
 
-    const result = adjudicate(candidates);
+    const { winner: result } = adjudicate(candidates);
 
     expect(result?.parsed.fields.secondaryIdentifier).toBe('MARIANA');
     expect(formatPassbotLine(result!.parsed.fields)).toBe(EXPECTED);
@@ -76,6 +88,6 @@ describe('adjudicate — trailing name artifact', () => {
 
 describe('adjudicate — no usable reading', () => {
   it('returns null when the pool holds nothing MRZ-shaped', () => {
-    expect(adjudicate([variant('bottom:grey', '14KOBOCT25<4652', 'L')])).toBeNull();
+    expect(adjudicate([variant('bottom:grey', '14KOBOCT25<4652', 'L')]).winner).toBeNull();
   });
 });
