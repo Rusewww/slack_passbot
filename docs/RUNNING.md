@@ -95,6 +95,33 @@ and verify — the PATH change does not apply to shells already open:
 tesseract --version
 ```
 
+**Install the MRZ model.** Also not optional in practice, and the single
+biggest factor in whether names are read correctly.
+
+Tesseract's `eng` model has no OCR-B chevron in its training data, so it cannot
+produce `<` and emits `K`, `E`, `S` or `C` instead. A name field is mostly
+filler, so with `eng` alone surnames get split on invented separators and the
+padding turns into runs of letters — while the numeric fields, unaffected by
+this, read perfectly. A document whose numbers are right and whose name is
+nonsense is the signature of a missing MRZ model.
+
+The Docker image installs it automatically. On a native setup, download it and
+drop it next to the other models:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DoubangoTelecom/tesseractMRZ/1e7adfecda5f3c9ae1fb12cf6b4b8c3958c63e46/tessdata_best/mrz.traineddata -o "C:\Program Files\Tesseract-OCR\tessdata\mrz.traineddata"
+```
+
+That path needs an elevated shell. Verify the file is 11,396,382 bytes, then
+confirm the sidecar picked it up — this is the authoritative check:
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+`{"status":"ok","tesseract_lang":"mrz"}` means it is in use. **`"eng"` means it
+is not**, and names will be unreliable no matter how good the photograph.
+
 **Set up Python.** From the `ocr/` directory:
 
 ```bash

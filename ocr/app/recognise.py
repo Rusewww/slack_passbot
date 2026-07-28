@@ -17,9 +17,14 @@ import pytesseract
 
 MRZ_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<"
 
-# `mrz` is a community-trained model specialised for OCR-B passport zones. It
-# is a meaningful accuracy win but is not packaged by Debian, so the image may
-# ship without it; `eng` plus the whitelist is a serviceable fallback.
+# `mrz` is trained on OCR-B passport zones. It matters more than it sounds: the
+# `eng` model has no chevron in its training data and so cannot emit `<` at
+# all, substituting K/E/S/C instead. Since a name field is mostly filler, that
+# destroys names while leaving digits intact.
+#
+# The Docker image installs it. A native development machine may not have it,
+# so `eng` plus the character whitelist remains the fallback — degraded, not
+# broken. `/health` reports which model was actually loaded.
 PREFERRED_LANG = os.environ.get("TESSERACT_LANG", "mrz")
 FALLBACK_LANG = "eng"
 

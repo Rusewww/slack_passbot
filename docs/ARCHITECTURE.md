@@ -150,10 +150,20 @@ state that does.
 in-memory `RateLimiter` with a Redis sorted set. Both are isolated behind small
 interfaces for this reason.
 
-**Better OCR.** Dropping an OCR-B-specific `mrz.traineddata` into the image's
-tessdata directory is picked up automatically by `recognise.py`; no code change.
-This is the highest-leverage accuracy improvement available and adds no runtime
-overhead.
+**Issuer formats.** `mrz/issuers.ts` holds document number shapes per issuing
+state. This is the only mechanism that can correct a substitution the check
+digits are blind to — the digit/letter class `0↔A` … `9↔J`, `6↔G` among them.
+An unrecognised issuer gets no constraint, so entries can only ever help the
+issuers they name. Add one only with a real sample to justify it.
+
+**The recognition model.** The image installs `mrz.traineddata`, trained on
+OCR-B passport zones, pinned to a commit and verified by SHA-256 in its own
+build stage. This is not a refinement — `eng` has no chevron in its training
+data and physically cannot emit `<`, so without the MRZ model a name field
+made mostly of filler is unreadable in principle, however good the photograph.
+`recognise.py` probes for it and falls back to `eng`, so a missing model
+degrades accuracy rather than breaking recognition; `/health` reports which one
+is loaded.
 
 ## Testing
 

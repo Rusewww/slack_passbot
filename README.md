@@ -121,7 +121,9 @@ Full detail and the threat model: [docs/SECURITY.md](docs/SECURITY.md).
 **Full setup, deployment and troubleshooting: [docs/RUNNING.md](docs/RUNNING.md).**
 The quick version follows.
 
-Prerequisites: Node 22+, Python 3.11+, Tesseract 5, Docker (optional).
+Prerequisites: Node 22+, Python 3.11+, Tesseract 5 **with the MRZ model**,
+Docker (optional). Without that model Tesseract cannot emit the `<` filler at
+all and names will not read; see [docs/RUNNING.md](docs/RUNNING.md).
 
 ```bash
 cp .env.example .env    # then fill in SLACK_BOT_TOKEN and SLACK_APP_TOKEN
