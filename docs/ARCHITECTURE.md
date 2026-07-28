@@ -12,11 +12,21 @@ cannot tell good output from bad. Here we can, which means a simple
 deterministic recogniser plus arithmetic outperforms a stronger one without
 verification. Three consequences follow:
 
-1. **Acceptance is binary, not probabilistic.** A result is returned only if
-   all five check digits verify. Confidence scores are never consulted.
-   Note the scope: every check digit is computed over **line 2**. Line 1 —
-   document code, issuing state, name — has none, and is handled separately
-   (see [Line 1 has no check digits](#line-1-has-no-check-digits)).
+1. **Trust is per field, and binary within a field.** A check digit either
+   holds or it does not; confidence scores are never consulted. Because each
+   field carries its own check digit independently of the composite, a reading
+   is rarely all-or-nothing — a damaged expiry date leaves a verified document
+   number entirely intact.
+
+   Results are delivered even when some checks fail, labelled with exactly
+   which ones did. That is a deliberate reversal of the original design, which
+   refused anything short of complete verification: correct in principle,
+   unusable in practice, because ordinary photographs frequently lose one
+   field. What must never happen is an unverified field being presented as
+   though it were proven.
+
+   Note the scope: no MRZ format check-digits the holder's **name** at all
+   (see [The name has no check digits](#the-name-has-no-check-digits)).
 2. **Repair is safe and fast.** OCR-B produces a small set of glyph confusions.
    Enumerating them and keeping only readings that satisfy the check digits
    recovers most imperfect scans in microseconds of CPU — no model call.

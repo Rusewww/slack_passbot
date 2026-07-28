@@ -11,6 +11,7 @@
  */
 
 import { computeCheckDigit, verifyCheckDigit } from './checkDigit.js';
+import type { MrzValidation } from './fields.js';
 import { TD1_LINE_LENGTH, validateTd1 } from './td1.js';
 import {
   TD3_LINE_LENGTH,
@@ -232,6 +233,93 @@ export interface Td1Repair {
   upper: string;
   middle: string;
   edits: number;
+}
+
+export interface BestEffort<T> {
+  reading: T;
+  edits: number;
+  /** Exactly which check digits hold for this reading. */
+  validation: MrzValidation;
+}
+
+/** How many of the format's check digits a reading satisfies. */
+export function countVerified(validation: MrzValidation): number {
+  return [
+    validation.documentNumber,
+    validation.birthDate,
+    validation.expiryDate,
+    validation.personalNumber,
+    validation.composite,
+  ].filter(Boolean).length;
+}
+
+/**
+ * Salvages what can be proven from a line 2 that will not fully validate.
+ *
+ * `repairLine2` is all-or-nothing: it returns a reading only when every check
+ * digit holds. That is the right default, but it discards a great deal of
+ * usable information, because each field carries its **own** check digit
+ * independently of the composite. A photograph can leave the expiry date
+ * unreadable while the document number and date of birth still verify exactly.
+ *
+ * This repairs each field against its own check digit, ignores the composite,
+ * and reports precisely which fields ended up proven. The caller decides what
+ * to do with a partial result; nothing here pretends an unverified field is
+ * trustworthy.
+ */
+export function bestEffortLine2(line2: string, maxEdits = 2): BestEffort<string> | null {
+  if (line2.length !== TD3_LINE_LENGTH) return null;
+
+  const documentNumber =
+    repairField(line2.slice(0, 9), line2.slice(9, 10), { maxEdits })[0] ?? line2.slice(0, 9);
+  const birthDate =
+    repairField(line2.slice(13, 19), line2.slice(19, 20), { maxEdits, alphabet: 'digits' })[0] ??
+    line2.slice(13, 19);
+  const expiryDate =
+    repairField(line2.slice(21, 27), line2.slice(27, 28), { maxEdits, alphabet: 'digits' })[0] ??
+    line2.slice(21, 27);
+
+  const reading =
+    documentNumber +
+    line2.slice(9, 13) +
+    birthDate +
+    line2.slice(19, 21) +
+    expiryDate +
+    line2.slice(27, TD3_LINE_LENGTH);
+
+  return {
+    reading,
+    edits: editDistance(line2, reading),
+    validation: validateLine2(reading),
+  };
+}
+
+/** The TD1 equivalent of `bestEffortLine2`. */
+export function bestEffortTd1Lines(
+  upper: string,
+  middle: string,
+  maxEdits = 2,
+): BestEffort<{ upper: string; middle: string }> | null {
+  if (upper.length !== TD1_LINE_LENGTH || middle.length !== TD1_LINE_LENGTH) return null;
+
+  const documentNumber =
+    repairField(upper.slice(5, 14), upper.slice(14, 15), { maxEdits })[0] ?? upper.slice(5, 14);
+  const birthDate =
+    repairField(middle.slice(0, 6), middle.slice(6, 7), { maxEdits, alphabet: 'digits' })[0] ??
+    middle.slice(0, 6);
+  const expiryDate =
+    repairField(middle.slice(8, 14), middle.slice(14, 15), { maxEdits, alphabet: 'digits' })[0] ??
+    middle.slice(8, 14);
+
+  const upperReading = upper.slice(0, 5) + documentNumber + upper.slice(14);
+  const middleReading =
+    birthDate + middle.slice(6, 8) + expiryDate + middle.slice(14, TD1_LINE_LENGTH);
+
+  return {
+    reading: { upper: upperReading, middle: middleReading },
+    edits: editDistance(upper, upperReading) + editDistance(middle, middleReading),
+    validation: validateTd1(upperReading, middleReading),
+  };
 }
 
 /**

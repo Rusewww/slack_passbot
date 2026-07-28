@@ -167,19 +167,38 @@ channel can see it. To allow specific channels, set `INTAKE_MODE=allowlist` and
 ```
 P/UKR/XX000000/UKR/24AUG91/F/25SEP23/TKACHENKO/MARIANA
 ```
-Number and dates check-digit verified · name unverified · direct read · Not stored — this message is the only copy.
+All check digits verified · name never check-digit protected · direct read · Not stored — this message is the only copy.
 ````
 
 If the photo needed correcting you will see `read with check-digit correction`
-and how many characters were repaired. If the check digits cannot be satisfied
-the bot reports failure rather than a reading it cannot prove — that is working
-as intended, not a bug.
+and how many characters were repaired.
 
-**"name unverified" is literal, not boilerplate.** Every TD3 check digit is
-computed over line 2, so the document number, dates and sex are provable. The
-name lives on line 1, which has no check digit at all; it is reconstructed by
-majority vote across the OCR variants and can still be wrong. Check the name
-against the document by eye before relying on it.
+### When some check digits fail
+
+The reading is still delivered, led by a warning naming exactly what failed:
+
+````
+⚠️ *Some check digits did not verify — treat this reading as unconfirmed.*
+Failed: *date of expiry*. Compare those fields against the document before using them.
+
+```
+P/UKR/XX000000/UKR/24AUG91/F/25SEP23/TKACHENKO/MARIANA
+```
+Check digits confirmed for: document number, date of birth, personal number. A confirmed field is exact.
+
+Partly verified · name never check-digit protected · direct read · Not stored — this message is the only copy.
+````
+
+This is working as intended. Each field carries its own check digit, so an
+unreadable expiry date says nothing about a document number that verified
+exactly — and refusing the whole reading over one bad character made the bot
+useless on ordinary photographs.
+
+**The distinction is load-bearing, not boilerplate.** A field listed as
+confirmed is exact. A field listed as failed may be wrong while looking
+entirely reasonable — check it against the document. And the **name is never
+check-digit protected in any MRZ format**; it is reconstructed by majority vote
+across the OCR variants, so verify it by eye even when everything else passes.
 
 ---
 

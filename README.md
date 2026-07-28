@@ -39,8 +39,19 @@ when it is not:
 
 Stage 2 is what keeps most photographs on the deterministic path: a single
 ambiguous glyph is usually solvable algebraically from the check digits rather
-than by asking a bigger model. A result is only ever returned if all five check
-digits verify — the bot reports failure rather than a reading it cannot prove.
+than by asking a bigger model.
+
+Where a check digit *does* verify, the field is exact. Where it does not, the
+bot still reports what it read — refusing outright made it useless on ordinary
+photographs — but says so plainly, naming which checks held and which did not,
+so a partly-damaged strip still yields the fields it can prove:
+
+> :warning: **Some check digits did not verify — treat this reading as unconfirmed.**
+> Failed: **date of expiry**. Compare those fields against the document before using them.
+
+Each field carries its own check digit independently of the composite, so an
+unreadable expiry date does not cast doubt on a document number that verified
+exactly.
 
 ### What the check digits do *not* cover
 

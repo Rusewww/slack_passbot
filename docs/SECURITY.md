@@ -37,10 +37,25 @@ Every control below follows from that.
 ## Correctness as a security property
 
 A misread passport number that *looks* plausible is worse than no answer: it
-propagates silently into whatever process consumes it. The pipeline therefore
-refuses to emit a result unless every check digit verifies, and the vision
-fallback is held to the identical standard — a hallucinated document number
-fails the arithmetic and is discarded rather than delivered.
+propagates silently into whatever process consumes it. The mitigation is
+therefore **labelling**, not suppression.
+
+Every field is reported together with whether its check digit verified. A
+verified field is exact. An unverified one is delivered with a prominent
+warning naming it, because withholding it entirely proved unusable — ordinary
+photographs routinely lose a single field, and refusing the whole reading over
+one bad character meant the bot answered almost nothing.
+
+The risk this accepts is real and should be stated plainly: **an unverified
+field may be wrong while looking entirely reasonable.** A consumer that ignores
+the warning and treats every returned field as confirmed has defeated the
+control. If you build anything automated on top of this bot, branch on the
+per-field validation flags rather than on the presence of a result.
+
+The vision fallback faces the same check digits, so a hallucinated document
+number cannot be presented as verified — but for the same reason as above, its
+unverified fields are delivered with the warning rather than discarded, and a
+model's guess looks more plausible than OCR noise while being no more reliable.
 
 **The guarantee stops at line 2.** All five check digits are computed over it,
 so the document number, dates, sex and personal number are provable. The

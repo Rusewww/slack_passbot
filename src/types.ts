@@ -1,3 +1,4 @@
+import type { MrzFormat } from './mrz/fields.js';
 import type { Td3Fields, Td3Validation } from './mrz/td3.js';
 
 /** Which stage of the pipeline produced the accepted reading. */
@@ -6,7 +7,13 @@ export type ExtractionSource = 'tesseract' | 'tesseract+repair' | 'ai-fallback';
 export interface ExtractionSuccess {
   ok: true;
   fields: Td3Fields;
+  /**
+   * Which check digits held. `allValid: false` is a legitimate outcome, not an
+   * error: the reading is still delivered, flagged as partly unverified. The
+   * consumer must decide field by field what it can rely on.
+   */
   validation: Td3Validation;
+  format: MrzFormat;
   source: ExtractionSource;
   /** Character substitutions applied by check-digit repair, if any. */
   edits: number;

@@ -19,7 +19,15 @@ import type { MrzFields, MrzFormat, MrzValidation } from '../mrz/fields.js';
 import { formatPassbotLine } from '../mrz/format.js';
 import { buildLine1, chooseLine1Fields } from '../mrz/line1.js';
 import { chooseNames } from '../mrz/names.js';
-import { repairLine2, repairTd1Lines, repairTd3, type Td1Repair } from '../mrz/repair.js';
+import {
+  bestEffortLine2,
+  bestEffortTd1Lines,
+  countVerified,
+  repairLine2,
+  repairTd1Lines,
+  repairTd3,
+  type Td1Repair,
+} from '../mrz/repair.js';
 import { looksLikeNameLine, parseTd1, TD1_LINE_LENGTH } from '../mrz/td1.js';
 import { parseTd3, Td3FormatError, TD3_LINE_LENGTH, type Td3ParseResult } from '../mrz/td3.js';
 import { FallbackUnsupported, recogniseWithVision } from '../ocr/fallback.js';
@@ -46,11 +54,13 @@ function accept(
   parsed: { fields: MrzFields; validation: MrzValidation },
   source: ExtractionSource,
   edits: number,
+  format: MrzFormat,
 ): ExtractionResult {
   return {
     ok: true,
     fields: parsed.fields,
     validation: parsed.validation,
+    format,
     source,
     edits,
     formatted: formatPassbotLine(parsed.fields),
@@ -93,11 +103,12 @@ interface Adjudicated {
  * never looked at line 1.
  */
 function adjudicateTd3(pool: readonly string[]): Adjudicated | null {
-  // --- Line 2: provable ---------------------------------------------------
-  let line2: { value: string; edits: number } | null = null;
-  for (const line of pool) {
-    if (line.length !== TD3_LINE_LENGTH) continue;
+  const lines = pool.filter((line) => line.length === TD3_LINE_LENGTH);
+  if (lines.length === 0) return null;
 
+  // --- Line 2, first pass: a reading every check digit accepts -------------
+  let line2: { value: string; edits: number } | null = null;
+  for (const line of lines) {
     const repaired = repairLine2(line);
     if (!repaired) continue;
     if (line2 === null || repaired.edits < line2.edits) {
@@ -105,7 +116,30 @@ function adjudicateTd3(pool: readonly string[]): Adjudicated | null {
     }
     if (repaired.edits === 0) break;
   }
-  if (!line2) return null;
+
+  // --- Line 2, second pass: salvage whatever is provable ------------------
+  // Reached only when nothing validates completely. Each field carries its own
+  // check digit, so a partly-damaged strip still yields fields that are proven
+  // exactly; the ones that are not are reported as unverified rather than
+  // withheld.
+  if (!line2) {
+    let best: { value: string; edits: number; verified: number } | null = null;
+    for (const line of lines) {
+      const attempt = bestEffortLine2(line);
+      if (!attempt) continue;
+
+      const verified = countVerified(attempt.validation);
+      if (
+        best === null ||
+        verified > best.verified ||
+        (verified === best.verified && attempt.edits < best.edits)
+      ) {
+        best = { value: attempt.reading, edits: attempt.edits, verified };
+      }
+    }
+    if (!best) return null;
+    line2 = { value: best.value, edits: best.edits };
+  }
 
   // --- Line 1: plausible only ---------------------------------------------
   const nationality = line2.value.slice(10, 13).replace(/<+$/, '');
@@ -113,7 +147,7 @@ function adjudicateTd3(pool: readonly string[]): Adjudicated | null {
   if (!line1Fields) return null;
 
   const parsed = tryParse([buildLine1(line1Fields), line2.value]);
-  if (!parsed?.validation.allValid) return null;
+  if (!parsed) return null;
 
   return { parsed, format: 'TD3', edits: line2.edits };
 }
@@ -147,7 +181,32 @@ function adjudicateTd1(pool: readonly string[]): Adjudicated | null {
     }
     if (pair?.edits === 0) break;
   }
-  if (!pair) return null;
+
+  // Same fallback as TD3: when no pairing validates completely, keep the one
+  // proving the most fields rather than reporting nothing.
+  if (!pair) {
+    let best: { pair: Td1Repair; verified: number } | null = null;
+    for (const upper of lines) {
+      for (const middle of lines) {
+        if (upper === middle) continue;
+
+        const attempt = bestEffortTd1Lines(upper, middle);
+        if (!attempt) continue;
+
+        const verified = countVerified(attempt.validation);
+        const candidate = { ...attempt.reading, edits: attempt.edits };
+        if (
+          best === null ||
+          verified > best.verified ||
+          (verified === best.verified && candidate.edits < best.pair.edits)
+        ) {
+          best = { pair: candidate, verified };
+        }
+      }
+    }
+    if (!best) return null;
+    pair = best.pair;
+  }
 
   // The name line must not be one of the two already claimed.
   const nameCandidates = lines.filter(
@@ -161,7 +220,6 @@ function adjudicateTd1(pool: readonly string[]): Adjudicated | null {
     .slice(0, TD1_LINE_LENGTH);
 
   const parsed = parseTd1(pair.upper, pair.middle, nameLine);
-  if (!parsed.validation.allValid) return null;
 
   return { parsed, format: 'TD1', edits: pair.edits };
 }
@@ -213,11 +271,19 @@ export async function extractMrz(image: ImageInput, deps: PipelineDeps): Promise
 
     const winner = adjudicate(result.candidates);
     if (winner) {
-      log.info({ format: winner.format, edits: winner.edits }, 'MRZ accepted');
+      log.info(
+        {
+          format: winner.format,
+          edits: winner.edits,
+          verified: countVerified(winner.parsed.validation),
+        },
+        'MRZ accepted',
+      );
       return accept(
         winner.parsed,
         winner.edits === 0 ? 'tesseract' : 'tesseract+repair',
         winner.edits,
+        winner.format,
       );
     }
   } catch (error) {
@@ -248,18 +314,34 @@ export async function extractMrz(image: ImageInput, deps: PipelineDeps): Promise
     });
     if (!visionLines) return { ok: false, reason: 'no_mrz_found' };
 
-    // The model's reading is held to exactly the same standard as Tesseract's,
-    // so a hallucinated document number cannot reach the user.
+    // The model's reading faces exactly the same check digits as Tesseract's.
+    // A passing check digit means the same thing whoever produced the
+    // characters; what differs is the unverified remainder, where a model's
+    // guess looks more plausible than OCR noise while being no more reliable.
+    // The reply names both the source and the unverified fields for that
+    // reason.
     const parsed = tryParse(visionLines);
     if (parsed?.validation.allValid) {
       log.info({ stage: 'ai-fallback' }, 'MRZ accepted');
-      return accept(parsed, 'ai-fallback', 0);
+      return accept(parsed, 'ai-fallback', 0, 'TD3');
     }
 
     const repaired = repairTd3(visionLines[0], visionLines[1]);
     if (repaired) {
       log.info({ stage: 'ai-fallback', edits: repaired.edits }, 'MRZ accepted');
-      return accept(repaired.parsed, 'ai-fallback', repaired.edits);
+      return accept(repaired.parsed, 'ai-fallback', repaired.edits, 'TD3');
+    }
+
+    const salvaged = bestEffortLine2(visionLines[1]);
+    if (salvaged) {
+      const partial = tryParse([visionLines[0], salvaged.reading]);
+      if (partial) {
+        log.info(
+          { stage: 'ai-fallback', verified: countVerified(partial.validation) },
+          'MRZ accepted unverified',
+        );
+        return accept(partial, 'ai-fallback', salvaged.edits, 'TD3');
+      }
     }
 
     return { ok: false, reason: 'check_digits_failed' };
