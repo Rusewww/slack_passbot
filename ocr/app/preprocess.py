@@ -6,7 +6,7 @@ photo is close to useless. Everything here exists to turn the second into the
 first.
 
 The strategy is deliberately to produce *several* candidate images rather than
-one "best" guess. Deciding which one is right is cheap and exact downstream —
+one "best" guess. Deciding which one is right is fast and exact downstream —
 the check digits settle it — so it is better to hand the recogniser a handful
 of plausible renderings than to commit early to a single threshold.
 """
@@ -259,7 +259,7 @@ def _variants(strip: np.ndarray, prefix: str) -> list[Candidate]:
     """Several binarisations of one strip.
 
     Glare, coloured security printing under the MRZ, and shadows each defeat a
-    different thresholding strategy, so we run the cheap ones all at once.
+    different thresholding strategy, so we run several at once.
     """
     grey = _upscale(cv2.cvtColor(strip, cv2.COLOR_BGR2GRAY))
 

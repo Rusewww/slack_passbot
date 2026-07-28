@@ -24,16 +24,16 @@ That changes the problem. Instead of trusting a recogniser's confidence score,
 the bot can verify arithmetically whether a reading is correct, and correct it
 when it is not:
 
-| Stage | What it does | Cost |
+| Stage | What it does | Where it runs |
 | --- | --- | --- |
-| 1. Localise + OCR | OpenCV finds and deskews the MRZ strip; Tesseract reads it under an `A-Z0-9<` whitelist | free |
-| 2. Check-digit repair | Enumerates OCR-B glyph confusions (`0/O`, `1/I`, `5/S`, `8/B`, …) and keeps only readings that satisfy every check digit | free |
-| 3. Vision fallback | A vision model transcribes the MRZ, then faces the *same* check-digit gate | paid, opt-in, off by default |
+| 1. Localise + OCR | OpenCV finds and deskews the MRZ strip; Tesseract reads it under an `A-Z0-9<` whitelist | in the container |
+| 2. Check-digit repair | Enumerates OCR-B glyph confusions (`0/O`, `1/I`, `5/S`, `8/B`, …) and keeps only readings that satisfy every check digit | in the container |
+| 3. Vision fallback | A vision model transcribes the MRZ, then faces the *same* check-digit gate | external API; opt-in, off by default |
 
-Stage 2 is what makes this cheap: a single ambiguous glyph is usually solvable
-algebraically from the check digits rather than by asking a bigger model. A
-result is only ever returned if all five check digits verify — the bot reports
-failure rather than a reading it cannot prove.
+Stage 2 is what keeps most photographs on the deterministic path: a single
+ambiguous glyph is usually solvable algebraically from the check digits rather
+than by asking a bigger model. A result is only ever returned if all five check
+digits verify — the bot reports failure rather than a reading it cannot prove.
 
 ## Architecture
 
@@ -86,6 +86,9 @@ Full detail and the threat model: [docs/SECURITY.md](docs/SECURITY.md).
 
 ## Running it
 
+**Full setup, deployment and troubleshooting: [docs/RUNNING.md](docs/RUNNING.md).**
+The quick version follows.
+
 Prerequisites: Node 22+, Python 3.11+, Tesseract 5, Docker (optional).
 
 ```bash
@@ -127,8 +130,8 @@ fly secrets set SLACK_BOT_TOKEN=xoxb-… SLACK_APP_TOKEN=xapp-…
 fly deploy
 ```
 
-One 512 MB always-on machine, no public IP, no database, no queue — roughly
-$0–4/month. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for why serverless
-is a worse fit here.
+One 512 MB always-on machine, no public IP, no database, no queue. See
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for why serverless is a worse fit
+here.
 
 [icao]: https://www.icao.int/publications/pages/publication.aspx?docnum=9303

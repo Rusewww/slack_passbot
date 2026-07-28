@@ -6,17 +6,18 @@ The MRZ is self-verifying. ICAO 9303 TD3 puts check digits over the document
 number, date of birth, date of expiry and personal number, plus a composite
 digit over all of them. Given a reading, we can compute whether it is correct.
 
-That inverts the usual OCR trade-off. Normally you buy accuracy — a better
-model, a paid API, a human in the loop — because you cannot tell good output
-from bad. Here we can, which means a cheap recogniser plus arithmetic beats an
-expensive recogniser without it. Three consequences follow:
+That inverts the usual OCR trade-off. Normally you reach for a stronger
+recogniser — a better model, a hosted API, a human in the loop — because you
+cannot tell good output from bad. Here we can, which means a simple
+deterministic recogniser plus arithmetic outperforms a stronger one without
+verification. Three consequences follow:
 
 1. **Acceptance is binary, not probabilistic.** A result is returned only if
    all five check digits verify. Confidence scores are never consulted.
-2. **Repair is cheap and safe.** OCR-B produces a small set of glyph confusions.
+2. **Repair is safe and fast.** OCR-B produces a small set of glyph confusions.
    Enumerating them and keeping only readings that satisfy the check digits
-   recovers most imperfect scans for microseconds of CPU — no model call.
-3. **The expensive path is rarely taken.** The vision fallback exists for
+   recovers most imperfect scans in microseconds of CPU — no model call.
+3. **The heaviest path is rarely taken.** The vision fallback exists for
    genuinely bad photographs, and is off by default.
 
 ## Component layout
@@ -46,9 +47,9 @@ adjudication happens in `src/pipeline/extract.ts` against `src/mrz`.
 
 The alternative — having Python validate check digits and return one answer —
 would duplicate the MRZ specification in two languages, which is exactly the
-kind of logic that drifts. Since validation is essentially free, running it
-over a handful of candidates in one place costs nothing and keeps the standard
-implemented once.
+kind of logic that drifts. Validation is a few microseconds of arithmetic, so
+running it over a handful of candidates in one place is negligible and keeps the
+standard implemented once.
 
 ### Why one container, two processes
 
@@ -64,18 +65,18 @@ per upload, that dominates the actual work.
 
 ## Why not serverless
 
-Scale-to-zero looks like the cheapest option and is not, for this workload:
+Scale-to-zero looks like the obvious fit and is not, for this workload:
 
 | Consideration | Effect |
 | --- | --- |
 | Slack's 3-second ack | Forces an ack-then-async split: two functions and a queue instead of one process. |
-| Cloud Run CPU throttling | CPU is throttled after the response is sent, so background processing needs `--no-cpu-throttling` — which removes the scale-to-zero saving. |
+| Cloud Run CPU throttling | CPU is throttled after the response is sent, so background processing needs `--no-cpu-throttling` — which keeps the instance allocated anyway, defeating the point of scaling to zero. |
 | Cold starts | A container carrying OpenCV and Tesseract starts in seconds, on an interactive path. |
 | Socket Mode | Incompatible with a request-scoped runtime; HTTP mode would mean a public endpoint and signature verification. |
 
-An always-on 512 MB machine costs roughly $0–4/month, has no cold starts, needs
-no queue, and exposes no inbound port. It is cheaper *and* simpler here. The
-sidecar boundary is the natural seam if volume ever justifies splitting.
+An always-on 512 MB machine has no cold starts, needs no queue, and exposes no
+inbound port. It is the simpler arrangement here. The sidecar boundary is the
+natural seam if volume ever justifies splitting.
 
 ## Extension points
 
@@ -97,8 +98,8 @@ interfaces for this reason.
 
 **Better OCR.** Dropping an OCR-B-specific `mrz.traineddata` into the image's
 tessdata directory is picked up automatically by `recognise.py`; no code change.
-This is the highest-leverage accuracy improvement available and costs nothing
-at runtime.
+This is the highest-leverage accuracy improvement available and adds no runtime
+overhead.
 
 ## Testing
 
