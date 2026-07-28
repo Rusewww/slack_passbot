@@ -41,7 +41,31 @@ RUN pip install --no-cache-dir \
       "opencv-python-headless>=4.11" "numpy>=2.1" "pytesseract>=0.3.13"
 
 
-# ---------- Stage 3: runtime ----------
+# ---------- Stage 3: the MRZ recognition model ----------
+# Tesseract's `eng` model has no OCR-B chevron in its training data, so it
+# cannot emit `<` and substitutes K/E/S/C instead. Since an MRZ name field is
+# mostly filler, that destroys names while leaving digits intact — the exact
+# failure this addresses.
+#
+# Pinned to a commit and verified by digest: the build fails rather than
+# installs a different file if upstream ever changes. Fetched in its own stage
+# so curl never reaches the runtime image.
+FROM debian:bookworm-slim AS tessdata
+
+ARG MRZ_COMMIT=1e7adfecda5f3c9ae1fb12cf6b4b8c3958c63e46
+ARG MRZ_SHA256=e44f5b7a6bdd3f382ef3bfa84ee0057f5897946a84a094c26910e0a124f3a9bd
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL \
+      "https://raw.githubusercontent.com/DoubangoTelecom/tesseractMRZ/${MRZ_COMMIT}/tessdata_best/mrz.traineddata" \
+      -o /tmp/mrz.traineddata \
+ && echo "${MRZ_SHA256}  /tmp/mrz.traineddata" | sha256sum -c -
+
+
+# ---------- Stage 4: runtime ----------
 FROM node:22-bookworm-slim AS runtime
 
 # tesseract-ocr provides the engine; libglib2.0-0 is the one native library the
@@ -55,11 +79,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         tini \
     && rm -rf /var/lib/apt/lists/*
 
-# Optional accuracy upgrade: a traineddata model specialised for OCR-B passport
-# zones. It is not packaged by Debian, so it is not installed here — drop the
-# file into /usr/share/tesseract-ocr/5/tessdata/mrz.traineddata and the sidecar
-# picks it up automatically (see ocr/app/recognise.py). Without it the code
-# falls back to `eng` with the MRZ character whitelist.
+# The OCR-B model, into Debian's tessdata directory. `recognise.py` probes for
+# `mrz` and falls back to `eng` if it is absent, so a wrong path here degrades
+# accuracy rather than breaking recognition — check the `tesseract_lang` field
+# on /health to confirm which model is actually loaded.
+COPY --from=tessdata /tmp/mrz.traineddata /usr/share/tesseract-ocr/5/tessdata/mrz.traineddata
 
 # Strip the package managers the base image ships. The container's only job is
 # `node dist/index.js` and `uvicorn` — npm, npx, corepack and yarn are never
@@ -87,7 +111,14 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 # Unprivileged user. `node` (uid 1000) already exists in the base image.
 USER node
 
+# Baked in so a running container can report which commit it is. Without this
+# a stale image is indistinguishable from a broken fix — which has already
+# cost one round of misdiagnosis. Pass with
+# `docker build --build-arg BUILD_COMMIT=$(git rev-parse HEAD)`.
+ARG BUILD_COMMIT=unknown
+
 ENV NODE_ENV=production \
+    BUILD_COMMIT=${BUILD_COMMIT} \
     OCR_SIDECAR_URL=http://127.0.0.1:8000 \
     PYTHONPATH=/app \
     PYTHONDONTWRITEBYTECODE=1 \

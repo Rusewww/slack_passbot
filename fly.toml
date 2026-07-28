@@ -13,6 +13,10 @@ primary_region = "waw"
 [build]
   dockerfile = "Dockerfile"
 
+  # So a deployed machine can report which commit it is running.
+  [build.args]
+    BUILD_COMMIT = "unknown"
+
 [env]
   NODE_ENV = "production"
   LOG_LEVEL = "info"

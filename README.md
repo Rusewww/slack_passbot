@@ -15,10 +15,17 @@ date of birth, sex, date of expiry, surname, given names.
 
 ## How it works
 
-The MRZ is not free-form text. It is [ICAO 9303][icao] TD3: two lines of exactly
-44 characters in OCR-B, with **check digits** over the document number, date of
-birth, date of expiry, the optional personal number, and a composite over all of
-them.
+The MRZ is not free-form text. It is a fixed [ICAO 9303][icao] layout in OCR-B,
+with **check digits** over the document number, date of birth, date of expiry
+and a composite across the rest. Two layouts are supported:
+
+| Format | Used by | Shape | Name field |
+| --- | --- | --- | --- |
+| **TD3** | passports | 2 lines × 44 | line 1 |
+| **TD1** | identity cards | 3 lines × 30 | line 3 |
+
+Both decode to the same nine output fields, so the reply looks identical
+whichever document you send.
 
 That changes the problem. Instead of trusting a recogniser's confidence score,
 the bot can verify arithmetically whether a reading is correct, and correct it
@@ -32,8 +39,33 @@ when it is not:
 
 Stage 2 is what keeps most photographs on the deterministic path: a single
 ambiguous glyph is usually solvable algebraically from the check digits rather
-than by asking a bigger model. A result is only ever returned if all five check
-digits verify — the bot reports failure rather than a reading it cannot prove.
+than by asking a bigger model.
+
+Where a check digit *does* verify, the field is exact. Where it does not, the
+bot still reports what it read — refusing outright made it useless on ordinary
+photographs — but says so plainly, naming which checks held and which did not,
+so a partly-damaged strip still yields the fields it can prove:
+
+> :warning: **Some check digits did not verify — treat this reading as unconfirmed.**
+> Failed: **date of expiry**. Compare those fields against the document before using them.
+
+Each field carries its own check digit independently of the composite, so an
+unreadable expiry date does not cast doubt on a document number that verified
+exactly.
+
+### What the check digits do *not* cover
+
+The check digits cover the document number, the dates and a composite — and
+nothing else. The document code, issuing state and the holder's **name** carry
+no check digit of any kind (TD3 puts them on line 1, TD1 splits them between
+line 1 and line 3). Those fields cannot be proven, only judged plausible.
+
+They are therefore reconstructed differently: the OCR sidecar returns one
+reading per preprocessing variant, and line 1 is rebuilt field-by-field by
+weighted majority across all of them, weighted by structural plausibility
+(see [`src/mrz/line1.ts`](src/mrz/line1.ts)). It is redundancy standing in for
+proof, and it is genuinely weaker — a name is a best reading, not a verified
+one, and the reply says so.
 
 ## Architecture
 
@@ -61,7 +93,7 @@ request-signature handling, nothing for a scanner to find.
 
 | Path | Contents |
 | --- | --- |
-| `src/mrz/` | TD3 parsing, check digits, confusion repair, output formatting |
+| `src/mrz/` | TD1 and TD3 parsing, check digits, confusion repair, name consensus, formatting |
 | `src/slack/` | Bolt wiring, intake handler, file download, reply construction |
 | `src/pipeline/` | Stage orchestration and candidate adjudication |
 | `src/security/` | Magic-byte validation, size limits, rate limiting |
@@ -89,7 +121,9 @@ Full detail and the threat model: [docs/SECURITY.md](docs/SECURITY.md).
 **Full setup, deployment and troubleshooting: [docs/RUNNING.md](docs/RUNNING.md).**
 The quick version follows.
 
-Prerequisites: Node 22+, Python 3.11+, Tesseract 5, Docker (optional).
+Prerequisites: Node 22+, Python 3.11+, Tesseract 5 **with the MRZ model**,
+Docker (optional). Without that model Tesseract cannot emit the `<` filler at
+all and names will not read; see [docs/RUNNING.md](docs/RUNNING.md).
 
 ```bash
 cp .env.example .env    # then fill in SLACK_BOT_TOKEN and SLACK_APP_TOKEN

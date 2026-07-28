@@ -11,7 +11,15 @@
  */
 
 import { computeCheckDigit, verifyCheckDigit } from './checkDigit.js';
-import { TD3_LINE_LENGTH, compositeInput, parseTd3, type Td3ParseResult } from './td3.js';
+import type { MrzValidation } from './fields.js';
+import { TD1_LINE_LENGTH, validateTd1 } from './td1.js';
+import {
+  TD3_LINE_LENGTH,
+  compositeInput,
+  parseTd3,
+  validateLine2,
+  type Td3ParseResult,
+} from './td3.js';
 
 /** Symmetric confusion pairs observed in OCR-B passport scans. */
 const CONFUSION_PAIRS: ReadonlyArray<readonly [string, string]> = [
@@ -153,6 +161,12 @@ export interface RepairResult {
   edits: number;
 }
 
+export interface Line2Repair {
+  line2: string;
+  /** Number of character substitutions applied relative to the OCR output. */
+  edits: number;
+}
+
 function editDistance(a: string, b: string): number {
   let n = 0;
   for (let i = 0; i < a.length; i += 1) if (a[i] !== b[i]) n += 1;
@@ -160,14 +174,17 @@ function editDistance(a: string, b: string): number {
 }
 
 /**
- * Attempts to turn an imperfect TD3 read into one that satisfies every check
+ * Attempts to turn an imperfect line 2 into one that satisfies every check
  * digit. Fields are repaired independently against their own check digits, and
  * the composite digit then arbitrates between surviving combinations.
  *
+ * Line 2 is repaired on its own because it is the only line the check digits
+ * cover — line 1 is neither validated nor corrected here.
+ *
  * Returns the fully-valid candidate with the fewest edits, or null.
  */
-export function repairTd3(line1: string, line2: string, maxEdits = 2): RepairResult | null {
-  if (line1.length !== TD3_LINE_LENGTH || line2.length !== TD3_LINE_LENGTH) return null;
+export function repairLine2(line2: string, maxEdits = 2): Line2Repair | null {
+  if (line2.length !== TD3_LINE_LENGTH) return null;
 
   const docNumbers = repairField(line2.slice(0, 9), line2.slice(9, 10), { maxEdits });
   const birthDates = repairField(line2.slice(13, 19), line2.slice(19, 20), {
@@ -181,7 +198,7 @@ export function repairTd3(line1: string, line2: string, maxEdits = 2): RepairRes
 
   if (docNumbers.length === 0 || birthDates.length === 0 || expiryDates.length === 0) return null;
 
-  let best: RepairResult | null = null;
+  let best: Line2Repair | null = null;
   let tried = 0;
 
   for (const documentNumber of docNumbers) {
@@ -200,16 +217,173 @@ export function repairTd3(line1: string, line2: string, maxEdits = 2): RepairRes
           line2.slice(27, TD3_LINE_LENGTH);
 
         if (computeCheckDigit(compositeInput(candidate)) !== Number(line2.slice(43, 44))) continue;
-
-        const parsed = parseTd3(line1, candidate);
-        if (!parsed.validation.allValid) continue;
+        if (!validateLine2(candidate).allValid) continue;
 
         const edits = editDistance(line2, candidate);
-        if (best === null || edits < best.edits) best = { parsed, edits };
+        if (best === null || edits < best.edits) best = { line2: candidate, edits };
         if (edits === 0) return best;
       }
     }
   }
 
   return best;
+}
+
+export interface Td1Repair {
+  upper: string;
+  middle: string;
+  edits: number;
+}
+
+export interface BestEffort<T> {
+  reading: T;
+  edits: number;
+  /** Exactly which check digits hold for this reading. */
+  validation: MrzValidation;
+}
+
+/** How many of the format's check digits a reading satisfies. */
+export function countVerified(validation: MrzValidation): number {
+  return [
+    validation.documentNumber,
+    validation.birthDate,
+    validation.expiryDate,
+    validation.personalNumber,
+    validation.composite,
+  ].filter(Boolean).length;
+}
+
+/**
+ * Salvages what can be proven from a line 2 that will not fully validate.
+ *
+ * `repairLine2` is all-or-nothing: it returns a reading only when every check
+ * digit holds. That is the right default, but it discards a great deal of
+ * usable information, because each field carries its **own** check digit
+ * independently of the composite. A photograph can leave the expiry date
+ * unreadable while the document number and date of birth still verify exactly.
+ *
+ * This repairs each field against its own check digit, ignores the composite,
+ * and reports precisely which fields ended up proven. The caller decides what
+ * to do with a partial result; nothing here pretends an unverified field is
+ * trustworthy.
+ */
+export function bestEffortLine2(line2: string, maxEdits = 2): BestEffort<string> | null {
+  if (line2.length !== TD3_LINE_LENGTH) return null;
+
+  const documentNumber =
+    repairField(line2.slice(0, 9), line2.slice(9, 10), { maxEdits })[0] ?? line2.slice(0, 9);
+  const birthDate =
+    repairField(line2.slice(13, 19), line2.slice(19, 20), { maxEdits, alphabet: 'digits' })[0] ??
+    line2.slice(13, 19);
+  const expiryDate =
+    repairField(line2.slice(21, 27), line2.slice(27, 28), { maxEdits, alphabet: 'digits' })[0] ??
+    line2.slice(21, 27);
+
+  const reading =
+    documentNumber +
+    line2.slice(9, 13) +
+    birthDate +
+    line2.slice(19, 21) +
+    expiryDate +
+    line2.slice(27, TD3_LINE_LENGTH);
+
+  return {
+    reading,
+    edits: editDistance(line2, reading),
+    validation: validateLine2(reading),
+  };
+}
+
+/** The TD1 equivalent of `bestEffortLine2`. */
+export function bestEffortTd1Lines(
+  upper: string,
+  middle: string,
+  maxEdits = 2,
+): BestEffort<{ upper: string; middle: string }> | null {
+  if (upper.length !== TD1_LINE_LENGTH || middle.length !== TD1_LINE_LENGTH) return null;
+
+  const documentNumber =
+    repairField(upper.slice(5, 14), upper.slice(14, 15), { maxEdits })[0] ?? upper.slice(5, 14);
+  const birthDate =
+    repairField(middle.slice(0, 6), middle.slice(6, 7), { maxEdits, alphabet: 'digits' })[0] ??
+    middle.slice(0, 6);
+  const expiryDate =
+    repairField(middle.slice(8, 14), middle.slice(14, 15), { maxEdits, alphabet: 'digits' })[0] ??
+    middle.slice(8, 14);
+
+  const upperReading = upper.slice(0, 5) + documentNumber + upper.slice(14);
+  const middleReading =
+    birthDate + middle.slice(6, 8) + expiryDate + middle.slice(14, TD1_LINE_LENGTH);
+
+  return {
+    reading: { upper: upperReading, middle: middleReading },
+    edits: editDistance(upper, upperReading) + editDistance(middle, middleReading),
+    validation: validateTd1(upperReading, middleReading),
+  };
+}
+
+/**
+ * The TD1 equivalent: repairs the document number on the upper line and the
+ * two dates on the middle line, with the composite digit — which spans both
+ * lines — arbitrating between surviving combinations.
+ */
+export function repairTd1Lines(
+  upper: string,
+  middle: string,
+  maxEdits = 2,
+): Td1Repair | null {
+  if (upper.length !== TD1_LINE_LENGTH || middle.length !== TD1_LINE_LENGTH) return null;
+
+  const docNumbers = repairField(upper.slice(5, 14), upper.slice(14, 15), { maxEdits });
+  const birthDates = repairField(middle.slice(0, 6), middle.slice(6, 7), {
+    maxEdits,
+    alphabet: 'digits',
+  });
+  const expiryDates = repairField(middle.slice(8, 14), middle.slice(14, 15), {
+    maxEdits,
+    alphabet: 'digits',
+  });
+
+  if (docNumbers.length === 0 || birthDates.length === 0 || expiryDates.length === 0) return null;
+
+  let best: Td1Repair | null = null;
+  let tried = 0;
+
+  for (const documentNumber of docNumbers) {
+    for (const birthDate of birthDates) {
+      for (const expiryDate of expiryDates) {
+        if ((tried += 1) > MAX_COMBINATIONS) return best;
+
+        const upperCandidate = upper.slice(0, 5) + documentNumber + upper.slice(14);
+        const middleCandidate =
+          birthDate + middle.slice(6, 8) + expiryDate + middle.slice(14, TD1_LINE_LENGTH);
+
+        if (!validateTd1(upperCandidate, middleCandidate).allValid) continue;
+
+        const edits =
+          editDistance(upper, upperCandidate) + editDistance(middle, middleCandidate);
+        if (best === null || edits < best.edits) {
+          best = { upper: upperCandidate, middle: middleCandidate, edits };
+        }
+        if (edits === 0) return best;
+      }
+    }
+  }
+
+  return best;
+}
+
+/**
+ * Convenience wrapper that pairs a repaired line 2 with a given line 1.
+ *
+ * Note that line 1 is passed through untouched and unverified — it is outside
+ * the reach of every check digit.
+ */
+export function repairTd3(line1: string, line2: string, maxEdits = 2): RepairResult | null {
+  if (line1.length !== TD3_LINE_LENGTH) return null;
+
+  const repaired = repairLine2(line2, maxEdits);
+  if (!repaired) return null;
+
+  return { parsed: parseTd3(line1, repaired.line2), edits: repaired.edits };
 }

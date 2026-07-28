@@ -95,6 +95,33 @@ and verify — the PATH change does not apply to shells already open:
 tesseract --version
 ```
 
+**Install the MRZ model.** Also not optional in practice, and the single
+biggest factor in whether names are read correctly.
+
+Tesseract's `eng` model has no OCR-B chevron in its training data, so it cannot
+produce `<` and emits `K`, `E`, `S` or `C` instead. A name field is mostly
+filler, so with `eng` alone surnames get split on invented separators and the
+padding turns into runs of letters — while the numeric fields, unaffected by
+this, read perfectly. A document whose numbers are right and whose name is
+nonsense is the signature of a missing MRZ model.
+
+The Docker image installs it automatically. On a native setup, download it and
+drop it next to the other models:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DoubangoTelecom/tesseractMRZ/1e7adfecda5f3c9ae1fb12cf6b4b8c3958c63e46/tessdata_best/mrz.traineddata -o "C:\Program Files\Tesseract-OCR\tessdata\mrz.traineddata"
+```
+
+That path needs an elevated shell. Verify the file is 11,396,382 bytes, then
+confirm the sidecar picked it up — this is the authoritative check:
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+`{"status":"ok","tesseract_lang":"mrz"}` means it is in use. **`"eng"` means it
+is not**, and names will be unreliable no matter how good the photograph.
+
 **Set up Python.** From the `ocr/` directory:
 
 ```bash
@@ -167,19 +194,38 @@ channel can see it. To allow specific channels, set `INTAKE_MODE=allowlist` and
 ```
 P/UKR/XX000000/UKR/24AUG91/F/25SEP23/TKACHENKO/MARIANA
 ```
-Document code  `P`
-Issuing state  `UKR`
-Document no.   `XX000000`
-Nationality    `UKR`
-Sex            `F`
-
-All check digits verified · direct read · Not stored — this message is the only copy.
+All check digits verified · name never check-digit protected · direct read · Not stored — this message is the only copy.
 ````
 
 If the photo needed correcting you will see `read with check-digit correction`
-and how many characters were repaired. If the check digits cannot be satisfied
-the bot reports failure rather than a reading it cannot prove — that is working
-as intended, not a bug.
+and how many characters were repaired.
+
+### When some check digits fail
+
+The reading is still delivered, led by a warning naming exactly what failed:
+
+````
+⚠️ *Some check digits did not verify — treat this reading as unconfirmed.*
+Failed: *date of expiry*. Compare those fields against the document before using them.
+
+```
+P/UKR/XX000000/UKR/24AUG91/F/25SEP23/TKACHENKO/MARIANA
+```
+Check digits confirmed for: document number, date of birth, personal number. A confirmed field is exact.
+
+Partly verified · name never check-digit protected · direct read · Not stored — this message is the only copy.
+````
+
+This is working as intended. Each field carries its own check digit, so an
+unreadable expiry date says nothing about a document number that verified
+exactly — and refusing the whole reading over one bad character made the bot
+useless on ordinary photographs.
+
+**The distinction is load-bearing, not boilerplate.** A field listed as
+confirmed is exact. A field listed as failed may be wrong while looking
+entirely reasonable — check it against the document. And the **name is never
+check-digit protected in any MRZ format**; it is reconstructed by majority vote
+across the OCR variants, so verify it by eye even when everything else passes.
 
 ---
 

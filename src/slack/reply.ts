@@ -7,6 +7,7 @@
 
 import type { KnownBlock } from '@slack/types';
 
+import { buildLabel } from '../buildInfo.js';
 import type { ExtractionFailureReason, ExtractionSuccess } from '../types.js';
 
 const SOURCE_LABEL: Record<ExtractionSuccess['source'], string> = {
@@ -20,40 +21,122 @@ const FAILURE_MESSAGE: Record<ExtractionFailureReason, string> = {
     'I could not find a machine readable zone in that image. Make sure the two lines of `<<<` characters along the bottom of the document are fully inside the frame.',
   unreadable:
     'I found the MRZ but could not read it reliably. A flatter angle and more even lighting usually fixes this.',
+  // Failing check digits no longer cause a refusal — a partial reading is
+  // returned with a warning instead. This reason now means the recogniser
+  // could not assemble a reading at all, usually because the name line was
+  // too damaged to identify.
   check_digits_failed:
-    'I read the MRZ but the check digits did not verify, so I will not report a result I cannot prove is correct. Please retake the photo straight-on, with the whole bottom strip in focus.',
+    'I found the MRZ but could not make out enough of it to report anything — the name line in particular was unreadable. Please retake the photo straight-on, with the whole bottom strip in focus.',
+  name_unreadable:
+    'I read the document number and dates, but nothing on the name line was legible enough to be a name. Rather than report characters I know are wrong, I am reporting nothing. Please retake the photo with the whole bottom strip sharp and evenly lit.',
+  unsupported_mrz:
+    'I found a machine readable zone, but not in a layout I decode. I read passports (TD3: two lines of 44 characters) and identity cards (TD1: three lines of 30). Visas and older card formats are not supported yet.',
   unsupported_format: 'That file type is not supported. Send a JPEG, PNG or HEIC photo.',
   too_large: 'That image is larger than I accept. Send a photo under 10 MB.',
   ocr_unavailable: 'The recognition service is not responding. This has been logged — try again shortly.',
   timeout: 'Processing took too long and was stopped. Please try again.',
 };
 
+/** Check digits, in the order they are worth reading about. */
+const CHECKS: ReadonlyArray<{ key: keyof ExtractionSuccess['validation']; label: string }> = [
+  { key: 'documentNumber', label: 'document number' },
+  { key: 'birthDate', label: 'date of birth' },
+  { key: 'expiryDate', label: 'date of expiry' },
+  { key: 'personalNumber', label: 'personal number' },
+  { key: 'composite', label: 'composite' },
+];
+
+/**
+ * Which fields a reading proves, and which it merely guesses.
+ *
+ * `personalNumber` is skipped for TD1, which defines no such check digit —
+ * reporting it as "verified" there would be claiming a guarantee that does not
+ * exist.
+ */
+function verificationBreakdown(result: ExtractionSuccess): { verified: string[]; failed: string[] } {
+  const verified: string[] = [];
+  const failed: string[] = [];
+
+  for (const { key, label } of CHECKS) {
+    if (key === 'personalNumber' && result.format === 'TD1') continue;
+    (result.validation[key] ? verified : failed).push(label);
+  }
+
+  return { verified, failed };
+}
+
 export function successBlocks(result: ExtractionSuccess): KnownBlock[] {
-  const f = result.fields;
-  const details = [
-    `*Document code*  \`${f.documentCode}\``,
-    `*Issuing state*  \`${f.issuingState}\``,
-    `*Document no.*  \`${f.documentNumber}\``,
-    `*Nationality*  \`${f.nationality}\``,
-    `*Sex*  \`${f.sex}\``,
-  ].join('\n');
+  const blocks: KnownBlock[] = [];
+  const { verified, failed } = verificationBreakdown(result);
+
+  // Anomalies come first: an issuer-format mismatch means a field is wrong in
+  // a way the check digits are structurally unable to detect, which is more
+  // serious than a check digit that simply failed.
+  if (result.anomalies.length > 0) {
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: [
+          ':rotating_light: *This reading is suspect beyond what the check digits can tell you.*',
+          ...result.anomalies.map((anomaly) => `• ${anomaly}`),
+        ].join('\n'),
+      },
+    });
+  }
+
+  // The warning goes next, so it cannot be missed by someone who copies the
+  // string straight out of the code block.
+  if (!result.validation.allValid) {
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: [
+          ':warning: *Some check digits did not verify — treat this reading as unconfirmed.*',
+          `Failed: *${failed.join(', ')}*. Compare those fields against the document before using them.`,
+        ].join('\n'),
+      },
+    });
+  }
+
+  blocks.push({
+    type: 'section',
+    text: { type: 'mrkdwn', text: `\`\`\`\n${result.formatted}\n\`\`\`` },
+  });
+
+  if (!result.validation.allValid && verified.length > 0) {
+    blocks.push({
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: `Check digits confirmed for: ${verified.join(', ')}. A confirmed field is exact.`,
+        },
+      ],
+    });
+  }
+
+  // Deliberately precise about the limit of the guarantee: no MRZ format gives
+  // the holder's name a check digit, so it is a best reading even when every
+  // other field verifies.
+  const status = result.validation.allValid
+    ? 'All check digits verified'
+    : 'Partly verified';
 
   const context = [
-    `All check digits verified · ${SOURCE_LABEL[result.source]}`,
+    `${status} · name never check-digit protected · ${SOURCE_LABEL[result.source]}`,
     result.edits > 0 ? `${result.edits} character(s) corrected` : null,
     'Not stored — this message is the only copy.',
+    // So a stale binary announces itself instead of being blamed on the code.
+    `build ${buildLabel()}`,
   ]
     .filter(Boolean)
     .join(' · ');
 
-  return [
-    {
-      type: 'section',
-      text: { type: 'mrkdwn', text: `\`\`\`\n${result.formatted}\n\`\`\`` },
-    },
-    { type: 'section', text: { type: 'mrkdwn', text: details } },
-    { type: 'context', elements: [{ type: 'mrkdwn', text: context }] },
-  ];
+  blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: context }] });
+
+  return blocks;
 }
 
 export function failureBlocks(reason: ExtractionFailureReason): KnownBlock[] {

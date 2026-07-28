@@ -17,6 +17,8 @@ from app.preprocess import (
     build_candidates,
     decode,
     locate_mrz,
+    sharpen,
+    split_lines,
 )
 
 LINE_1 = "P<UKRTKACHENKO<<MARIANA<<<<<<<<<<<<<<<<<<<<<"
@@ -93,3 +95,50 @@ class TestBuildCandidates:
         for candidate in build_candidates(synthetic_passport()):
             assert candidate.image.ndim == 2
             assert ":" in candidate.variant
+
+
+class TestSplitLines:
+    """The MRZ strip is split into individual lines so each can be read alone.
+
+    Tesseract does markedly better on one line of fixed-pitch text than on a
+    block of them, which matters most on exactly the small, soft strips that
+    currently fail.
+    """
+
+    def _located_binary(self) -> np.ndarray:
+        located = locate_mrz(synthetic_passport())
+        assert located is not None
+        grey = cv2.cvtColor(located, cv2.COLOR_BGR2GRAY)
+        _, binary = cv2.threshold(grey, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+        return binary
+
+    def test_finds_both_mrz_lines(self) -> None:
+        assert len(split_lines(self._located_binary())) == 2
+
+    def test_bands_are_ordered_top_to_bottom_and_disjoint(self) -> None:
+        bands = split_lines(self._located_binary())
+        # Each band must be a plausible single line: much wider than it is tall.
+        for band in bands:
+            assert band.shape[0] >= 6
+            assert band.shape[1] / band.shape[0] > 5
+
+    def test_returns_nothing_for_a_blank_strip(self) -> None:
+        assert split_lines(np.full((40, 400), 255, dtype=np.uint8)) == []
+
+    def test_ignores_an_input_too_short_to_hold_a_line(self) -> None:
+        assert split_lines(np.full((4, 400), 0, dtype=np.uint8)) == []
+
+
+class TestSharpen:
+    def test_preserves_shape_and_type(self) -> None:
+        grey = cv2.cvtColor(synthetic_passport(), cv2.COLOR_BGR2GRAY)
+        sharpened = sharpen(grey)
+
+        assert sharpened.shape == grey.shape
+        assert sharpened.dtype == grey.dtype
+
+    def test_increases_local_contrast(self) -> None:
+        # The point of the unsharp mask: edges between glyphs get further apart
+        # in intensity, which is what separates `<` from `K` on a soft scan.
+        grey = cv2.cvtColor(synthetic_passport(), cv2.COLOR_BGR2GRAY)
+        assert sharpen(grey).std() > grey.std()

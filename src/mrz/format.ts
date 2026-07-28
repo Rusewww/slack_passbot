@@ -69,10 +69,31 @@ export function resolveYear(
 }
 
 /**
+ * Formats a date, falling back to the raw characters when they are not a
+ * usable YYMMDD.
+ *
+ * A reading whose date check digit did not verify can contain anything the
+ * recogniser saw. Reporting those characters verbatim is honest and lets the
+ * reader compare them against the document; throwing would take down the whole
+ * reply over one unreadable field.
+ */
+function formatMrzDateOrRaw(yymmdd: string): string {
+  try {
+    return formatMrzDate(yymmdd);
+  } catch {
+    return yymmdd;
+  }
+}
+
+/**
  * Produces the single-line delivery string.
  *
  * Order: documentCode / issuingState / documentNumber / nationality /
  *        birthDate / sex / expiryDate / surname / givenNames
+ *
+ * Never throws: it is also used for partially-verified readings, where any
+ * individual field may be garbage. Whether a field can be trusted is carried
+ * separately, in the validation flags.
  */
 export function formatPassbotLine(fields: Td3Fields): string {
   return [
@@ -80,9 +101,9 @@ export function formatPassbotLine(fields: Td3Fields): string {
     fields.issuingState,
     fields.documentNumber,
     fields.nationality,
-    formatMrzDate(fields.birthDate),
+    formatMrzDateOrRaw(fields.birthDate),
     fields.sex,
-    formatMrzDate(fields.expiryDate),
+    formatMrzDateOrRaw(fields.expiryDate),
     fields.primaryIdentifier,
     fields.secondaryIdentifier,
   ].join(OUTPUT_SEPARATOR);
