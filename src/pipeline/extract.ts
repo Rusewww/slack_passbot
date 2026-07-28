@@ -1,16 +1,16 @@
 /**
  * Extraction pipeline.
  *
- * Ordered cheapest-first, and every stage is gated on the same acceptance test:
+ * Ordered simplest-first, and every stage is gated on the same acceptance test:
  * all five TD3 check digits must hold. Nothing is delivered on the strength of
  * a recogniser's confidence score alone.
  *
- *   1. Tesseract candidates from the sidecar, parsed as-is   (free, ~0.3-1 s)
- *   2. Check-digit-driven repair of those candidates         (free, sub-ms)
- *   3. Vision model, if explicitly enabled                   (paid, ~2-4 s)
+ *   1. Tesseract candidates from the sidecar, parsed as-is   (local, ~0.3-1 s)
+ *   2. Check-digit-driven repair of those candidates         (local, sub-ms)
+ *   3. Vision model, if explicitly enabled                   (external, ~2-4 s)
  *
- * Stage 1 or 2 answers the large majority of real uploads, which is what keeps
- * the running cost of this service close to zero.
+ * Stage 1 or 2 answers the large majority of real uploads, so the external
+ * path is rarely reached.
  */
 
 import type { Logger } from 'pino';

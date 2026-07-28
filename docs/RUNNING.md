@@ -224,11 +224,11 @@ There is no public URL, and that is correct — Socket Mode dials out to Slack, 
 the app has no inbound port and no public IP. `fly.toml` has no `[[services]]`
 section for exactly this reason. Do not add one.
 
-### Cost
+### Machine sizing
 
-One `shared-cpu-1x` 512 MB machine, always on, no database and no queue:
-roughly $0–4/month. Do not enable auto-stop — the process has to stay connected
-to Slack to receive events.
+One `shared-cpu-1x` machine with 512 MB, always on, no database and no queue.
+Do not enable auto-stop — the process has to stay connected to Slack to receive
+events. 256 MB is not enough; OpenCV needs headroom to decode large photographs.
 
 ---
 

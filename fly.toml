@@ -2,7 +2,7 @@
 #
 # Socket Mode means there are no [[services]] and no public IP: the machine
 # makes an outbound WebSocket connection to Slack and accepts nothing inbound.
-# That is both the cheapest configuration and the smallest attack surface.
+# That also gives the smallest attack surface.
 #
 # Secrets are set out of band and never appear in this file:
 #   fly secrets set SLACK_BOT_TOKEN=... SLACK_APP_TOKEN=...
