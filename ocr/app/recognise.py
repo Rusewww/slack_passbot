@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -26,6 +27,15 @@ FALLBACK_LANG = "eng"
 # Tesseract from trying to infer a page layout that does not exist.
 TESSERACT_CONFIG = (
     f"--oem 1 --psm 6 -c tessedit_char_whitelist={MRZ_ALPHABET} "
+    "-c load_system_dawg=0 -c load_freq_dawg=0"
+)
+
+# PSM 7: one line, treated as one line. Given a single row of fixed-pitch
+# glyphs Tesseract stops inferring layout altogether and cannot let one line's
+# baseline estimate distort its neighbour's, which is worth a noticeable amount
+# of accuracy on a small or skewed strip.
+TESSERACT_LINE_CONFIG = (
+    f"--oem 1 --psm 7 -c tessedit_char_whitelist={MRZ_ALPHABET} "
     "-c load_system_dawg=0 -c load_freq_dawg=0"
 )
 
@@ -69,4 +79,23 @@ def _clean(line: str) -> str:
 def recognise(variant: str, image: np.ndarray) -> Recognition:
     raw = pytesseract.image_to_string(image, lang=_LANG, config=TESSERACT_CONFIG)
     lines = [cleaned for line in raw.splitlines() if (cleaned := _clean(line))]
+    return Recognition(variant=variant, text="\n".join(lines), lines=lines)
+
+
+def recognise_lines(variant: str, images: Sequence[np.ndarray]) -> Recognition:
+    """Recognises each MRZ line separately, one Tesseract call per line.
+
+    Costs one extra call per line over reading the block in one go, and buys
+    accuracy on exactly the inputs that need it. The results join the same
+    candidate pool as every other variant, so a per-line reading has to win the
+    same votes as anything else — it is extra evidence, not a shortcut.
+    """
+    lines: list[str] = []
+    for image in images:
+        raw = pytesseract.image_to_string(image, lang=_LANG, config=TESSERACT_LINE_CONFIG)
+        for line in raw.splitlines():
+            cleaned = _clean(line)
+            if cleaned:
+                lines.append(cleaned)
+
     return Recognition(variant=variant, text="\n".join(lines), lines=lines)

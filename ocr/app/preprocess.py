@@ -277,7 +277,66 @@ def _variants(strip: np.ndarray, prefix: str) -> list[Candidate]:
     _, clahe_otsu = cv2.threshold(clahe, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
     out.append(Candidate(f"{prefix}:clahe-otsu", clahe_otsu))
 
+    # Sharpened before thresholding, for strips that were small in the original
+    # photograph and are soft after upscaling.
+    _, sharp_otsu = cv2.threshold(sharpen(grey), 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+    out.append(Candidate(f"{prefix}:sharp-otsu", sharp_otsu))
+
     return out
+
+
+def sharpen(grey: np.ndarray) -> np.ndarray:
+    """Unsharp mask.
+
+    The MRZ on a phone photograph is often only a few dozen pixels tall, and
+    upscaling a soft image adds no detail on its own. Subtracting a blurred
+    copy restores edge contrast between adjacent glyphs, which is what
+    separates `<` from `K` when the strokes have bled together.
+    """
+    blurred = cv2.GaussianBlur(grey, (0, 0), sigmaX=3)
+    return cv2.addWeighted(grey, 1.6, blurred, -0.6, 0)
+
+
+# A band shorter than this is speckle, not a line of text.
+MIN_LINE_HEIGHT = 6
+# Rows carrying less ink than this share of the busiest row count as blank.
+INK_THRESHOLD = 0.12
+
+
+def split_lines(binary: np.ndarray) -> list[np.ndarray]:
+    """Splits a binarised MRZ strip into its individual lines.
+
+    Tesseract reads a single line of fixed-pitch text considerably better than
+    a block of them, because it stops trying to infer layout and cannot let one
+    line's baseline estimate distort another's. A horizontal projection is
+    enough to find the split: MRZ lines are separated by a band of clean
+    background, and nothing else in the crop competes.
+    """
+    if binary.ndim != 2 or binary.shape[0] < MIN_LINE_HEIGHT * 2:
+        return []
+
+    ink_per_row = (binary < 128).sum(axis=1)
+    if ink_per_row.max() == 0:
+        return []
+
+    occupied = ink_per_row > ink_per_row.max() * INK_THRESHOLD
+
+    bands: list[tuple[int, int]] = []
+    start: int | None = None
+    for row, has_ink in enumerate(occupied):
+        if has_ink and start is None:
+            start = row
+        elif not has_ink and start is not None:
+            if row - start >= MIN_LINE_HEIGHT:
+                bands.append((start, row))
+            start = None
+    if start is not None and len(occupied) - start >= MIN_LINE_HEIGHT:
+        bands.append((start, len(occupied)))
+
+    height = binary.shape[0]
+    # A couple of rows of margin: cropping tight to the ink clips descenders
+    # and the tops of digits.
+    return [binary[max(0, top - 2) : min(height, bottom + 2), :] for top, bottom in bands]
 
 
 def build_candidates(image: np.ndarray) -> list[Candidate]:

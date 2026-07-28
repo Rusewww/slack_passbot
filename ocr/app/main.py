@@ -19,7 +19,13 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 
 from . import recognise as engine
-from .preprocess import ImageTooLargeError, UndecodableImageError, build_candidates, decode
+from .preprocess import (
+    ImageTooLargeError,
+    UndecodableImageError,
+    build_candidates,
+    decode,
+    split_lines,
+)
 from .schemas import CandidateOut, HealthOut, RecogniseOut
 
 DEFAULT_MAX_PIXELS = 40_000_000
@@ -61,10 +67,30 @@ async def recognise_endpoint(request: Request) -> Response:
     finally:
         del body
 
-    candidates = [
-        CandidateOut(variant=result.variant, text=result.text, lines=result.lines)
-        for result in (engine.recognise(c.variant, c.image) for c in build_candidates(image))
-    ]
+    candidates: list[CandidateOut] = []
+    for prepared in build_candidates(image):
+        result = engine.recognise(prepared.variant, prepared.image)
+        candidates.append(
+            CandidateOut(variant=result.variant, text=result.text, lines=result.lines)
+        )
+
+        # Read the located strip a second time, one line at a time. Only for
+        # the located variants: the bottom-of-page fallback contains unrelated
+        # text whose rows would split into meaningless bands.
+        if not prepared.variant.startswith("located:"):
+            continue
+
+        rows = split_lines(prepared.image)
+        if len(rows) < 2:
+            continue
+
+        per_line = engine.recognise_lines(f"{prepared.variant}+perline", rows)
+        if per_line.lines:
+            candidates.append(
+                CandidateOut(
+                    variant=per_line.variant, text=per_line.text, lines=per_line.lines
+                )
+            )
 
     duration_ms = int((time.monotonic() - started) * 1000)
     log.info("recognised %d candidate(s) in %dms", len(candidates), duration_ms)
