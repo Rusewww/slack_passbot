@@ -11,6 +11,7 @@
  */
 
 import { computeCheckDigit, verifyCheckDigit } from './checkDigit.js';
+import { TD1_LINE_LENGTH, validateTd1 } from './td1.js';
 import {
   TD3_LINE_LENGTH,
   compositeInput,
@@ -219,6 +220,63 @@ export function repairLine2(line2: string, maxEdits = 2): Line2Repair | null {
 
         const edits = editDistance(line2, candidate);
         if (best === null || edits < best.edits) best = { line2: candidate, edits };
+        if (edits === 0) return best;
+      }
+    }
+  }
+
+  return best;
+}
+
+export interface Td1Repair {
+  upper: string;
+  middle: string;
+  edits: number;
+}
+
+/**
+ * The TD1 equivalent: repairs the document number on the upper line and the
+ * two dates on the middle line, with the composite digit — which spans both
+ * lines — arbitrating between surviving combinations.
+ */
+export function repairTd1Lines(
+  upper: string,
+  middle: string,
+  maxEdits = 2,
+): Td1Repair | null {
+  if (upper.length !== TD1_LINE_LENGTH || middle.length !== TD1_LINE_LENGTH) return null;
+
+  const docNumbers = repairField(upper.slice(5, 14), upper.slice(14, 15), { maxEdits });
+  const birthDates = repairField(middle.slice(0, 6), middle.slice(6, 7), {
+    maxEdits,
+    alphabet: 'digits',
+  });
+  const expiryDates = repairField(middle.slice(8, 14), middle.slice(14, 15), {
+    maxEdits,
+    alphabet: 'digits',
+  });
+
+  if (docNumbers.length === 0 || birthDates.length === 0 || expiryDates.length === 0) return null;
+
+  let best: Td1Repair | null = null;
+  let tried = 0;
+
+  for (const documentNumber of docNumbers) {
+    for (const birthDate of birthDates) {
+      for (const expiryDate of expiryDates) {
+        if ((tried += 1) > MAX_COMBINATIONS) return best;
+
+        const upperCandidate = upper.slice(0, 5) + documentNumber + upper.slice(14);
+        const middleCandidate =
+          birthDate + middle.slice(6, 8) + expiryDate + middle.slice(14, TD1_LINE_LENGTH);
+
+        if (!validateTd1(upperCandidate, middleCandidate).allValid) continue;
+
+        const edits =
+          editDistance(upper, upperCandidate) + editDistance(middle, middleCandidate);
+        if (best === null || edits < best.edits) {
+          best = { upper: upperCandidate, middle: middleCandidate, edits };
+        }
         if (edits === 0) return best;
       }
     }

@@ -16,6 +16,7 @@
  */
 
 import { computeCheckDigit, isMrzAlphabet, verifyCheckDigit } from './checkDigit.js';
+import type { MrzFields, MrzValidation, Sex as MrzSex } from './fields.js';
 
 export const TD3_LINE_LENGTH = 44;
 
@@ -41,41 +42,14 @@ export const TD3_OFFSETS = {
   },
 } as const;
 
-export type Sex = 'M' | 'F' | 'X';
-
-export interface Td3Fields {
-  documentCode: string;
-  issuingState: string;
-  /** Surname. */
-  primaryIdentifier: string;
-  /** Given names, space-separated when the MRZ holds several. */
-  secondaryIdentifier: string;
-  documentNumber: string;
-  /** ICAO calls this "nationality". It is NOT the country of birth — the MRZ
-   *  does not encode place of birth at all. */
-  nationality: string;
-  /** Raw `YYMMDD` as printed in the MRZ. */
-  birthDate: string;
-  /** `X` means unspecified (`<` in the MRZ). */
-  sex: Sex;
-  /** Raw `YYMMDD` as printed in the MRZ. */
-  expiryDate: string;
-  personalNumber: string;
-}
-
-export interface Td3Validation {
-  documentNumber: boolean;
-  birthDate: boolean;
-  expiryDate: boolean;
-  personalNumber: boolean;
-  composite: boolean;
-  /** True only when every check digit above holds. */
-  allValid: boolean;
-}
+/** Retained as the TD3-specific spellings of the shared field types. */
+export type Sex = MrzSex;
+export type Td3Fields = MrzFields;
+export type Td3Validation = MrzValidation;
 
 export interface Td3ParseResult {
-  fields: Td3Fields;
-  validation: Td3Validation;
+  fields: MrzFields;
+  validation: MrzValidation;
   /** The exact two lines the result was derived from, normalised. */
   lines: [string, string];
 }

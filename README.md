@@ -15,10 +15,17 @@ date of birth, sex, date of expiry, surname, given names.
 
 ## How it works
 
-The MRZ is not free-form text. It is [ICAO 9303][icao] TD3: two lines of exactly
-44 characters in OCR-B, with **check digits** over the document number, date of
-birth, date of expiry, the optional personal number, and a composite over all of
-them.
+The MRZ is not free-form text. It is a fixed [ICAO 9303][icao] layout in OCR-B,
+with **check digits** over the document number, date of birth, date of expiry
+and a composite across the rest. Two layouts are supported:
+
+| Format | Used by | Shape | Name field |
+| --- | --- | --- | --- |
+| **TD3** | passports | 2 lines × 44 | line 1 |
+| **TD1** | identity cards | 3 lines × 30 | line 3 |
+
+Both decode to the same nine output fields, so the reply looks identical
+whichever document you send.
 
 That changes the problem. Instead of trusting a recogniser's confidence score,
 the bot can verify arithmetically whether a reading is correct, and correct it
@@ -37,9 +44,10 @@ digits verify — the bot reports failure rather than a reading it cannot prove.
 
 ### What the check digits do *not* cover
 
-All five check digits live on **line 2**. The document code, issuing state and
-the holder's **name** are on line 1, which ICAO gives no check digit of any
-kind. Those fields cannot be proven, only judged plausible.
+The check digits cover the document number, the dates and a composite — and
+nothing else. The document code, issuing state and the holder's **name** carry
+no check digit of any kind (TD3 puts them on line 1, TD1 splits them between
+line 1 and line 3). Those fields cannot be proven, only judged plausible.
 
 They are therefore reconstructed differently: the OCR sidecar returns one
 reading per preprocessing variant, and line 1 is rebuilt field-by-field by
@@ -74,7 +82,7 @@ request-signature handling, nothing for a scanner to find.
 
 | Path | Contents |
 | --- | --- |
-| `src/mrz/` | TD3 parsing, check digits, confusion repair, output formatting |
+| `src/mrz/` | TD1 and TD3 parsing, check digits, confusion repair, name consensus, formatting |
 | `src/slack/` | Bolt wiring, intake handler, file download, reply construction |
 | `src/pipeline/` | Stage orchestration and candidate adjudication |
 | `src/security/` | Magic-byte validation, size limits, rate limiting |

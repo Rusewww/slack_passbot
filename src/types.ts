@@ -18,6 +18,8 @@ export type ExtractionFailureReason =
   | 'no_mrz_found'
   | 'unreadable'
   | 'check_digits_failed'
+  /** MRZ-shaped lines were found, but in a layout this bot does not decode. */
+  | 'unsupported_mrz'
   | 'unsupported_format'
   | 'too_large'
   | 'ocr_unavailable'

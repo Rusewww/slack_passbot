@@ -15,9 +15,12 @@
 
 import type { Logger } from 'pino';
 
+import type { MrzFields, MrzFormat, MrzValidation } from '../mrz/fields.js';
 import { formatPassbotLine } from '../mrz/format.js';
 import { buildLine1, chooseLine1Fields } from '../mrz/line1.js';
-import { repairLine2, repairTd3 } from '../mrz/repair.js';
+import { chooseNames } from '../mrz/names.js';
+import { repairLine2, repairTd1Lines, repairTd3, type Td1Repair } from '../mrz/repair.js';
+import { looksLikeNameLine, parseTd1, TD1_LINE_LENGTH } from '../mrz/td1.js';
 import { parseTd3, Td3FormatError, TD3_LINE_LENGTH, type Td3ParseResult } from '../mrz/td3.js';
 import { FallbackUnsupported, recogniseWithVision } from '../ocr/fallback.js';
 import {
@@ -26,7 +29,12 @@ import {
   SidecarUnavailable,
   type SidecarCandidate,
 } from '../ocr/sidecar.js';
-import type { ExtractionResult, ExtractionSource, ImageInput } from '../types.js';
+import type {
+  ExtractionFailureReason,
+  ExtractionResult,
+  ExtractionSource,
+  ImageInput,
+} from '../types.js';
 
 export interface PipelineDeps {
   logger: Logger;
@@ -34,7 +42,11 @@ export interface PipelineDeps {
   fallback: { enabled: boolean; apiKey?: string | undefined; model: string };
 }
 
-function accept(parsed: Td3ParseResult, source: ExtractionSource, edits: number): ExtractionResult {
+function accept(
+  parsed: { fields: MrzFields; validation: MrzValidation },
+  source: ExtractionSource,
+  edits: number,
+): ExtractionResult {
   return {
     ok: true,
     fields: parsed.fields,
@@ -56,7 +68,8 @@ function tryParse(lines: [string, string]): Td3ParseResult | null {
 }
 
 interface Adjudicated {
-  parsed: Td3ParseResult;
+  parsed: { fields: MrzFields; validation: MrzValidation };
+  format: MrzFormat;
   edits: number;
 }
 
@@ -79,9 +92,7 @@ interface Adjudicated {
  * line 1, and the check digits will happily certify the pair — because they
  * never looked at line 1.
  */
-function adjudicate(candidates: SidecarCandidate[]): Adjudicated | null {
-  const pool = [...new Set(candidates.flatMap((candidate) => candidate.lines))];
-
+function adjudicateTd3(pool: readonly string[]): Adjudicated | null {
   // --- Line 2: provable ---------------------------------------------------
   let line2: { value: string; edits: number } | null = null;
   for (const line of pool) {
@@ -104,7 +115,89 @@ function adjudicate(candidates: SidecarCandidate[]): Adjudicated | null {
   const parsed = tryParse([buildLine1(line1Fields), line2.value]);
   if (!parsed?.validation.allValid) return null;
 
-  return { parsed, edits: line2.edits };
+  return { parsed, format: 'TD3', edits: line2.edits };
+}
+
+/**
+ * TD1 identity cards: three lines of 30.
+ *
+ * The upper and middle lines are found by trying every ordered pair of
+ * 30-character lines and keeping the one the check digits accept. That is
+ * cheaper than it sounds — the pool is small — and it avoids having to
+ * classify lines by pattern-matching, which is exactly the kind of heuristic
+ * that misfires on a bad read. Proof decides the pairing wherever proof is
+ * available.
+ *
+ * The name line is then chosen by consensus, for the same reason as TD3 line
+ * 1: it carries no check digit.
+ */
+function adjudicateTd1(pool: readonly string[]): Adjudicated | null {
+  const lines = pool.filter((line) => line.length === TD1_LINE_LENGTH);
+  if (lines.length < 2) return null;
+
+  let pair: Td1Repair | null = null;
+  for (const upper of lines) {
+    for (const middle of lines) {
+      if (upper === middle) continue;
+
+      const repaired = repairTd1Lines(upper, middle);
+      if (!repaired) continue;
+      if (pair === null || repaired.edits < pair.edits) pair = repaired;
+      if (repaired.edits === 0) break;
+    }
+    if (pair?.edits === 0) break;
+  }
+  if (!pair) return null;
+
+  // The name line must not be one of the two already claimed.
+  const nameCandidates = lines.filter(
+    (line) => line !== pair.upper && line !== pair.middle && looksLikeNameLine(line),
+  );
+  const names = chooseNames(nameCandidates.map((field) => ({ field, weight: 1 })));
+  if (!names) return null;
+
+  const nameLine = `${names.primaryIdentifier}<<${names.secondaryIdentifier.replace(/ /g, '<')}`
+    .padEnd(TD1_LINE_LENGTH, '<')
+    .slice(0, TD1_LINE_LENGTH);
+
+  const parsed = parseTd1(pair.upper, pair.middle, nameLine);
+  if (!parsed.validation.allValid) return null;
+
+  return { parsed, format: 'TD1', edits: pair.edits };
+}
+
+/**
+ * Picks the best reading across all preprocessing variants.
+ *
+ * TD3 is tried first because passports are the common case; TD1 identity cards
+ * fall through to the second attempt. A document is only ever one of the two,
+ * so the order affects speed and nothing else.
+ */
+function adjudicate(candidates: SidecarCandidate[]): Adjudicated | null {
+  const pool = [...new Set(candidates.flatMap((candidate) => candidate.lines))];
+  return adjudicateTd3(pool) ?? adjudicateTd1(pool);
+}
+
+/**
+ * Explains a failure in terms the user can act on.
+ *
+ * The distinction that matters: lines of a supported length that would not
+ * validate is a photograph problem, and the user should retake it. Lines of
+ * some other length is a format problem, and retaking the photograph will
+ * never help.
+ */
+function diagnose(candidates: SidecarCandidate[]): ExtractionFailureReason {
+  const lengths = new Set(
+    candidates.flatMap((candidate) => candidate.lines).map((line) => line.length),
+  );
+
+  if (lengths.has(TD3_LINE_LENGTH) || lengths.has(TD1_LINE_LENGTH)) {
+    return 'check_digits_failed';
+  }
+  // A long run of MRZ-alphabet characters that is neither 44 nor 30 is very
+  // likely a format we do not decode — TD2, or a visa — rather than noise.
+  if ([...lengths].some((length) => length >= 28)) return 'unsupported_mrz';
+  return 'no_mrz_found';
 }
 
 export async function extractMrz(image: ImageInput, deps: PipelineDeps): Promise<ExtractionResult> {
@@ -112,15 +205,15 @@ export async function extractMrz(image: ImageInput, deps: PipelineDeps): Promise
   const canFallBack = deps.fallback.enabled && Boolean(deps.fallback.apiKey);
 
   // --- Stages 1 & 2: deterministic OCR, then check-digit repair -----------
-  let sawCandidates = false;
+  let deterministicFailure: ExtractionFailureReason = 'no_mrz_found';
   try {
     const result = await recognise(image.bytes, image.mimeType, deps.sidecar);
-    sawCandidates = result.candidates.length > 0;
+    deterministicFailure = diagnose(result.candidates);
     log.debug({ variants: result.candidates.length, durationMs: result.durationMs }, 'sidecar done');
 
     const winner = adjudicate(result.candidates);
     if (winner) {
-      log.info({ edits: winner.edits }, 'MRZ accepted');
+      log.info({ format: winner.format, edits: winner.edits }, 'MRZ accepted');
       return accept(
         winner.parsed,
         winner.edits === 0 ? 'tesseract' : 'tesseract+repair',
@@ -145,7 +238,7 @@ export async function extractMrz(image: ImageInput, deps: PipelineDeps): Promise
 
   // --- Stage 3: vision fallback ------------------------------------------
   if (!canFallBack) {
-    return { ok: false, reason: sawCandidates ? 'check_digits_failed' : 'no_mrz_found' };
+    return { ok: false, reason: deterministicFailure };
   }
 
   try {

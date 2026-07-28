@@ -22,6 +22,8 @@ const FAILURE_MESSAGE: Record<ExtractionFailureReason, string> = {
     'I found the MRZ but could not read it reliably. A flatter angle and more even lighting usually fixes this.',
   check_digits_failed:
     'I read the MRZ but the check digits did not verify, so I will not report a result I cannot prove is correct. Please retake the photo straight-on, with the whole bottom strip in focus.',
+  unsupported_mrz:
+    'I found a machine readable zone, but not in a layout I decode. I read passports (TD3: two lines of 44 characters) and identity cards (TD1: three lines of 30). Visas and older card formats are not supported yet.',
   unsupported_format: 'That file type is not supported. Send a JPEG, PNG or HEIC photo.',
   too_large: 'That image is larger than I accept. Send a photo under 10 MB.',
   ocr_unavailable: 'The recognition service is not responding. This has been logged — try again shortly.',

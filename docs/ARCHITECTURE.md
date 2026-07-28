@@ -54,12 +54,16 @@ kind of logic that drifts. Validation is a few microseconds of arithmetic, so
 running it over a handful of candidates in one place is negligible and keeps the
 standard implemented once.
 
-### Line 1 has no check digits
+### The name has no check digits
 
 This is the most important asymmetry in the system, and it is easy to miss:
-**every ICAO 9303 TD3 check digit is computed over line 2.** The document
-number, dates, sex and personal number are provable. The document code, issuing
-state, surname and given names — all of line 1 — are not covered by anything.
+**the check digits cover the document number, the dates and a composite, and
+nothing else.** Those fields are provable. The document code, issuing state,
+surname and given names are not covered by anything.
+
+Where that unverifiable text sits depends on the format — all of TD3 line 1,
+versus TD1's line 3 plus the first five characters of its line 1 — but the
+consequence is identical in both.
 
 Selecting both lines together from whichever preprocessing variant happened to
 parse is therefore a mistake, and was a real defect: a variant can produce a
@@ -114,11 +118,17 @@ natural seam if volume ever justifies splitting.
 
 ## Extension points
 
-**Other document types.** `src/mrz/td3.ts` is TD3-specific by design (fixed
-offsets, no heuristics). TD1 identity cards are three lines of 30 characters
-and TD2 is two lines of 36; both belong in sibling modules with the same shape,
-dispatched on line length. `_score()` in `preprocess.py` already tolerates
-three-line blocks.
+**Other document types.** TD3 (`td3.ts`, passports, 2×44) and TD1 (`td1.ts`,
+identity cards, 3×30) are each format-specific by design — fixed offsets, no
+heuristics — and both produce the shared `MrzFields`. TD2 (2×36, used by some
+older cards and visas) belongs in a third sibling module of the same shape.
+Dispatch is by line length in `pipeline/extract.ts`, which tries TD3 and falls
+through to TD1.
+
+The two formats differ in where the unverifiable text sits: TD3 puts the
+document code, issuing state and name together on line 1, whereas TD1 puts the
+code and state on line 1 — alongside the check-digit-covered document number —
+and the name alone on line 3. `names.ts` holds the part that is common to both.
 
 **Extended document numbers.** ICAO allows numbers longer than nine characters,
 in which case position 10 holds `<` and the remainder overflows into the
