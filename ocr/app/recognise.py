@@ -87,6 +87,28 @@ def recognise(variant: str, image: np.ndarray) -> Recognition:
     return Recognition(variant=variant, text="\n".join(lines), lines=lines)
 
 
+# Line lengths of the layouts the caller decodes: TD3 is 2x44, TD1 is 3x30.
+_COMPLETE_SHAPES = ((44, 2), (30, 3))
+
+
+def looks_complete(lines: Sequence[str]) -> bool:
+    """Whether a reading has the *shape* of a full MRZ.
+
+    Deliberately only a shape test — no check digits, no field semantics. Those
+    live on the caller's side and stay there; duplicating them here is how the
+    two implementations would drift apart.
+
+    Its only job is to decide when enough readings have been gathered to stop
+    calling Tesseract. Being wrong costs time, never correctness: a reading
+    that passes here still has to survive validation and the consensus vote
+    upstream.
+    """
+    for length, needed in _COMPLETE_SHAPES:
+        if sum(1 for line in lines if len(line) == length) >= needed:
+            return True
+    return False
+
+
 def recognise_lines(variant: str, images: Sequence[np.ndarray]) -> Recognition:
     """Recognises each MRZ line separately, one Tesseract call per line.
 

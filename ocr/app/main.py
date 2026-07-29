@@ -31,6 +31,14 @@ from .schemas import CandidateOut, HealthOut, RecogniseOut
 DEFAULT_MAX_PIXELS = 40_000_000
 MAX_BODY_BYTES = 12 * 1024 * 1024
 
+# How many complete-looking readings to gather before stopping.
+#
+# One is not enough: the caller resolves disagreements by majority, and that
+# vote is the only defence against substitutions the check digits are blind to
+# (`6` for `G`, and the rest of the 0-A..9-J class). Three leaves room for a
+# 2-1 decision. Raising it costs roughly 340 ms per extra reading.
+QUORUM = 3
+
 # No request body, no image dimensions, no recognised text — nothing that could
 # reconstruct a document ends up in the sidecar's logs either.
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -67,34 +75,78 @@ async def recognise_endpoint(request: Request) -> Response:
     finally:
         del body
 
+    prepared = build_candidates(image)
+    located = [c for c in prepared if c.variant.startswith("located:")]
+    fallback = [c for c in prepared if not c.variant.startswith("located:")]
+
     candidates: list[CandidateOut] = []
-    for prepared in build_candidates(image):
-        result = engine.recognise(prepared.variant, prepared.image)
-        candidates.append(
-            CandidateOut(variant=result.variant, text=result.text, lines=result.lines)
+    complete = 0
+
+    def run(variant: str, image_or_rows) -> bool:
+        """Recognises one variant, records it, and reports whether it looks whole."""
+        nonlocal complete
+        call_started = time.monotonic()
+        result = (
+            engine.recognise_lines(variant, image_or_rows)
+            if isinstance(image_or_rows, list)
+            else engine.recognise(variant, image_or_rows)
         )
-
-        # Read the located strip a second time, one line at a time. Only for
-        # the located variants: the bottom-of-page fallback contains unrelated
-        # text whose rows would split into meaningless bands.
-        if not prepared.variant.startswith("located:"):
-            continue
-
-        rows = split_lines(prepared.image)
-        if len(rows) < 2:
-            continue
-
-        per_line = engine.recognise_lines(f"{prepared.variant}+perline", rows)
-        if per_line.lines:
-            candidates.append(
-                CandidateOut(
-                    variant=per_line.variant, text=per_line.text, lines=per_line.lines
-                )
+        candidates.append(
+            CandidateOut(
+                variant=result.variant,
+                text=result.text,
+                lines=result.lines,
+                ms=int((time.monotonic() - call_started) * 1000),
             )
+        )
+        if engine.looks_complete(result.lines):
+            complete += 1
+            return True
+        return False
+
+    # Tesseract accounts for over 99% of the time here, so the only thing worth
+    # optimising is how many times it is called. Everything below exists to
+    # avoid calls that will not change the answer.
+    #
+    # Stopping at the first complete reading would be wrong: the caller decides
+    # between readings by majority, and that vote is what catches substitutions
+    # the check digits cannot see. So gather a quorum, then stop.
+    for candidate in located:
+        run(candidate.variant, candidate.image)
+        if complete >= QUORUM:
+            break
+
+    # Escalation, not routine work: reading line by line costs one call per
+    # line and only earns its keep when reading the block whole did not produce
+    # anything of the right shape.
+    if complete < QUORUM:
+        for candidate in located:
+            rows = split_lines(candidate.image)
+            if len(rows) < 2:
+                continue
+            run(f"{candidate.variant}+perline", rows)
+            if complete >= QUORUM:
+                break
+
+    # Last resort. The bottom-of-page crop is for photographs where MRZ
+    # localisation failed outright; if the located strip yielded anything
+    # usable, this is guaranteed waste.
+    if complete == 0:
+        for candidate in fallback:
+            run(candidate.variant, candidate.image)
+            if complete >= QUORUM:
+                break
 
     duration_ms = int((time.monotonic() - started) * 1000)
-    log.info("recognised %d candidate(s) in %dms", len(candidates), duration_ms)
+    log.info(
+        "recognised %d candidate(s), %d complete, in %dms",
+        len(candidates),
+        complete,
+        duration_ms,
+    )
 
     return JSONResponse(
-        RecogniseOut(candidates=candidates, durationMs=duration_ms).model_dump()
+        RecogniseOut(
+            candidates=candidates, durationMs=duration_ms, calls=len(candidates)
+        ).model_dump()
     )

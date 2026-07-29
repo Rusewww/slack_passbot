@@ -393,7 +393,14 @@ export async function extractMrz(image: ImageInput, deps: PipelineDeps): Promise
   try {
     const result = await recognise(image.bytes, image.mimeType, deps.sidecar);
     deterministicFailure = diagnose(result.candidates);
-    log.debug({ variants: result.candidates.length, durationMs: result.durationMs }, 'sidecar done');
+    log.info(
+      {
+        variants: result.candidates.length,
+        calls: result.calls ?? result.candidates.length,
+        durationMs: result.durationMs,
+      },
+      'sidecar done',
+    );
 
     const { winner, nameFailed } = adjudicate(result.candidates);
     if (nameFailed) deterministicFailure = 'name_unreadable';

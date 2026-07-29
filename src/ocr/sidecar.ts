@@ -15,11 +15,19 @@ export interface SidecarCandidate {
   text: string;
   /** Lines already normalised to the MRZ alphabet, but not length-checked. */
   lines: string[];
+  /** Wall time for this one Tesseract call. */
+  ms?: number;
 }
 
 export interface SidecarResult {
   candidates: SidecarCandidate[];
   durationMs: number;
+  /**
+   * Tesseract invocations made. Worth logging: recognition is over 99% of a
+   * request's cost, so this number *is* the latency, and a sudden rise in it
+   * is the first sign that the early-exit path has stopped working.
+   */
+  calls?: number;
 }
 
 export class SidecarUnavailable extends Error {
