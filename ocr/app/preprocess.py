@@ -6,9 +6,9 @@ photo is close to useless. Everything here exists to turn the second into the
 first.
 
 The strategy is deliberately to produce *several* candidate images rather than
-one "best" guess. Deciding which one is right is fast and exact downstream —
-the check digits settle it — so it is better to hand the recogniser a handful
-of plausible renderings than to commit early to a single threshold.
+one "best" guess. Deciding which one is right is fast and exact downstream,
+since the check digits settle it, so handing the recogniser a handful of
+plausible renderings beats committing early to a single threshold.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ import cv2
 import numpy as np
 
 # A single MRZ line is 44 characters of a monospaced font, so it is extremely
-# elongated — far more so than any caption or heading in the visual zone. That
+# elongated, far more so than any caption or heading in the visual zone. That
 # elongation is the primary discriminator.
 MIN_BAR_ASPECT = 12.0
 MIN_BAR_HEIGHT = 5.0

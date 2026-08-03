@@ -7,8 +7,8 @@ import { adjudicate } from '../../src/pipeline/extract.js';
 /**
  * A synthetic passport whose document number contains a `G`, so the `6↔G`
  * confusion applies. Both readings satisfy every check digit including the
- * composite — see checkDigitBlindSpot.test.ts — which means the arithmetic
- * cannot choose between them and only agreement across variants can.
+ * composite (see checkDigitBlindSpot.test.ts), so the arithmetic cannot choose
+ * between them and only agreement across variants can.
  */
 const LINE_1 = 'P<UKRTKACHENKO<<MARIANA<<<<<<<<<<<<<<<<<<<<<';
 const LINE_2 = 'GC000000<8UKR9108242F23092571234567890<<<<74';
@@ -20,10 +20,11 @@ function variant(name: string, ...lines: string[]): SidecarCandidate {
   return { variant: name, text: lines.join('\n'), lines };
 }
 
-describe('adjudicate — line 2 by consensus', () => {
+describe('adjudicate: line 2 by consensus', () => {
   it('outvotes a misread that the check digits cannot detect', () => {
     // The misread variant comes first and validates perfectly. Taking the
-    // first valid reading — the old behaviour — returned 6C000000.
+    // first valid reading, which is what the old behaviour did, returned
+    // 6C000000.
     const candidates = [
       variant('located:otsu', LINE_1, LINE_2_MISREAD),
       variant('located:grey', LINE_1, LINE_2),
@@ -38,7 +39,7 @@ describe('adjudicate — line 2 by consensus', () => {
   });
 
   it('corrects the misread from the issuer format even with a single variant', () => {
-    // No redundancy here, and the arithmetic is blind — but `6C000000` is not
+    // No redundancy here, and the arithmetic is blind, but `6C000000` is not
     // a shape Ukrainian passport numbers take, and exactly one reading fits
     // both that shape and the check digit.
     const { winner: result } = adjudicate([variant('located:otsu', LINE_1, LINE_2_MISREAD)]);
@@ -71,7 +72,7 @@ describe('adjudicate — line 2 by consensus', () => {
   });
 });
 
-describe('adjudicate — trailing name artifact', () => {
+describe('adjudicate: trailing name artifact', () => {
   it('drops a stray K attached to the given name', () => {
     const candidates = [
       variant('located:otsu', 'P<UKRTKACHENKO<<MARIANAK<<<<<<<<<<<<<<<<<<<<', LINE_2),
@@ -86,7 +87,7 @@ describe('adjudicate — trailing name artifact', () => {
   });
 });
 
-describe('adjudicate — no usable reading', () => {
+describe('adjudicate: no usable reading', () => {
   it('returns null when the pool holds nothing MRZ-shaped', () => {
     expect(adjudicate([variant('bottom:grey', '14KOBOCT25<4652', 'L')]).winner).toBeNull();
   });

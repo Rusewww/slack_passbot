@@ -4,7 +4,7 @@
  * OCR-B is a machine-readable font, but photographs still produce a small,
  * predictable set of glyph confusions (0/O, 1/I, 5/S, 8/B, 2/Z ...). Because
  * every significant TD3 field carries a check digit, we do not have to guess
- * which reading is right — we can enumerate the plausible substitutions and
+ * which reading is right. We can enumerate the plausible substitutions and
  * keep only the ones that satisfy the arithmetic. A candidate that passes all
  * five check digits is correct for practical purposes; the odds of a wrong
  * reading passing the composite as well are ~1 in 10^5.
@@ -179,7 +179,7 @@ function editDistance(a: string, b: string): number {
  * the composite digit then arbitrates between surviving combinations.
  *
  * Line 2 is repaired on its own because it is the only line the check digits
- * cover — line 1 is neither validated nor corrected here.
+ * cover. Line 1 is neither validated nor corrected here.
  *
  * Returns the fully-valid candidate with the fewest edits, or null.
  */
@@ -324,8 +324,8 @@ export function bestEffortTd1Lines(
 
 /**
  * The TD1 equivalent: repairs the document number on the upper line and the
- * two dates on the middle line, with the composite digit — which spans both
- * lines — arbitrating between surviving combinations.
+ * two dates on the middle line. The composite digit, which spans both lines,
+ * arbitrates between the surviving combinations.
  */
 export function repairTd1Lines(
   upper: string,
@@ -376,8 +376,8 @@ export function repairTd1Lines(
 /**
  * Convenience wrapper that pairs a repaired line 2 with a given line 1.
  *
- * Note that line 1 is passed through untouched and unverified — it is outside
- * the reach of every check digit.
+ * Line 1 is passed through untouched and unverified, being outside the reach
+ * of every check digit.
  */
 export function repairTd3(line1: string, line2: string, maxEdits = 2): RepairResult | null {
   if (line1.length !== TD3_LINE_LENGTH) return null;

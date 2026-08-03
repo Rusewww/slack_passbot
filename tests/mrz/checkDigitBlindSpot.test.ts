@@ -11,9 +11,9 @@ import { repairLine2 } from '../../src/mrz/repair.js';
 /**
  * A mod-10 checksum cannot detect a substitution that shifts a character's
  * value by a multiple of 10, because every weight (7, 3, 1) times 10 is itself
- * ≡ 0 mod 10. Character values are 0-9 for digits and 10-35 for A-Z, so the
- * pairs `0↔A` … `9↔J` are exactly ten apart — and `6↔G` is among the most
- * common OCR-B confusions there is.
+ * ≡ 0 mod 10. Character values are 0-9 for digits and 10-35 for A-Z, which
+ * leaves the pairs `0↔A` up to `9↔J` exactly ten apart, and `6↔G` is among the
+ * most common OCR-B confusions there is.
  *
  * These tests pin the limitation down so nobody later mistakes "the check
  * digit verified" for "the field is correct" in this specific class.
@@ -94,7 +94,7 @@ describe('trailing filler artifacts in given names', () => {
   it('does not erode a surname that genuinely ends in K', () => {
     // Ukrainian surnames ending in K are common. The rule applies to given
     // names only, because a surname is followed by `<<` and more name, never
-    // by padding — so a final K there is never this artifact.
+    // by padding, so a final K there is never this artifact.
     const variants = [
       'KOVALCHUK<<OLENA<<<<<<<<<<<<<<<<<<<<<<<<',
       'KOVALCHUK<<OLENA<<<<<<<<<<<<<<<<KKKKKKKK',

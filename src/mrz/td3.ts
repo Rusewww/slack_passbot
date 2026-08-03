@@ -1,5 +1,5 @@
 /**
- * ICAO 9303 Part 4 — TD3 (passport) machine readable zone.
+ * TD3 (passport) machine readable zone, per ICAO 9303 Part 4.
  *
  * Two lines of exactly 44 characters. All offsets below are zero-based and
  * fixed by the standard, which is why this parser is a pure function with no
@@ -61,8 +61,8 @@ export class Td3FormatError extends Error {
 /**
  * Normalises a candidate MRZ line: uppercases, maps common OCR renderings of
  * the filler character, and strips whitespace. Does NOT correct alphabet
- * confusions (0/O, 1/I ...) — that is `repair.ts`, and it must be driven by
- * check digits rather than guesswork.
+ * confusions (0/O, 1/I and so on). That is `repair.ts`, and it has to be
+ * driven by check digits rather than guesswork.
  */
 export function normaliseLine(raw: string): string {
   return raw
@@ -113,8 +113,8 @@ function parseSex(raw: string): Sex {
  * The composite check digit covers the document number field (with its check
  * digit), the date of birth field (with its check digit) and the expiry field
  * (with its check digit), plus the optional personal number and its check
- * digit — line 2 positions 1-10, 14-20 and 22-43 in the standard's 1-based
- * numbering.
+ * digit. In the standard's 1-based numbering that is line 2 positions 1-10,
+ * 14-20 and 22-43.
  */
 export function compositeInput(line2: string): string {
   return line2.slice(0, 10) + line2.slice(13, 20) + line2.slice(21, 43);
@@ -124,8 +124,8 @@ export function compositeInput(line2: string): string {
  * Verifies every check digit in a TD3 MRZ.
  *
  * Note what is absent: all five check digits live on line 2. The document
- * code, issuing state and the holder's name — the whole of line 1 — carry no
- * check digit of any kind, so nothing here says anything about them. Line 1
+ * code, issuing state and the holder's name, which is the whole of line 1,
+ * carry no check digit at all, so nothing here says anything about them. Line 1
  * has to be judged plausible instead; see `line1.ts`.
  */
 export function validateLine2(line2: string): Td3Validation {

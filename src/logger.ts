@@ -2,9 +2,9 @@
  * Structured logging with document data redacted at the transport level.
  *
  * The rule this module enforces: an MRZ string, a decoded field, or an image
- * buffer must never be able to reach a log sink, even by accident — logs
- * outlive the request and are the most common way sensitive data leaks out of
- * an otherwise stateless service.
+ * buffer must never reach a log sink, even by accident. Logs outlive the
+ * request, and they are the most common way sensitive data leaks out of an
+ * otherwise stateless service.
  */
 
 import pino, { type Logger } from 'pino';

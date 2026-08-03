@@ -26,7 +26,7 @@ import {
  *     exactly 44 characters
  */
 const VARIANTS = {
-  /** 44 chars — the only exact-length candidate, and the most corrupted. */
+  /** 44 chars: the only exact-length candidate, and the most corrupted. */
   trap: 'PKUKRTKACHENKO<<NARIANA<K<<KKKKKEKEKEEEEEKKE',
   /** 45 chars, name intact. */
   overrun: 'P<UKRTKACHENKO<<MARIANA<<<<<<<<<KKKKKKKKKKKKK',
@@ -58,7 +58,7 @@ describe('extractLine1', () => {
   });
 
   it('drops a single-character component left by a corrupted separator', () => {
-    // `TKACHENKO<K<MARIANA` — the K was a filler, not an initial.
+    // `TKACHENKO<K<MARIANA`, where the K was a filler rather than an initial.
     expect(extractLine1(VARIANTS.splitSeparator)).toMatchObject({
       primaryIdentifier: 'TKACHENKO',
       secondaryIdentifier: 'MARIANA',

@@ -20,7 +20,7 @@ services:
       uvicorn ocr.app.main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
       - ./ocr:/app/ocr:ro
-    # Bound to loopback on the host as well — never expose this port.
+    # Bound to loopback on the host as well. Never expose this port.
     ports:
       - '127.0.0.1:8000:8000'
     environment:

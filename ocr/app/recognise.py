@@ -23,8 +23,8 @@ MRZ_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<"
 # destroys names while leaving digits intact.
 #
 # The Docker image installs it. A native development machine may not have it,
-# so `eng` plus the character whitelist remains the fallback — degraded, not
-# broken. `/health` reports which model was actually loaded.
+# so `eng` plus the character whitelist remains the fallback. Degraded rather
+# than broken. `/health` reports which model was actually loaded.
 PREFERRED_LANG = os.environ.get("TESSERACT_LANG", "mrz")
 FALLBACK_LANG = "eng"
 
@@ -94,9 +94,9 @@ _COMPLETE_SHAPES = ((44, 2), (30, 3))
 def looks_complete(lines: Sequence[str]) -> bool:
     """Whether a reading has the *shape* of a full MRZ.
 
-    Deliberately only a shape test — no check digits, no field semantics. Those
-    live on the caller's side and stay there; duplicating them here is how the
-    two implementations would drift apart.
+    Only a shape test: no check digits, no field semantics. Those live on the
+    caller's side and stay there, since duplicating them here is how the two
+    implementations would drift apart.
 
     Its only job is to decide when enough readings have been gathered to stop
     calling Tesseract. Being wrong costs time, never correctness: a reading
@@ -115,7 +115,7 @@ def recognise_lines(variant: str, images: Sequence[np.ndarray]) -> Recognition:
     Costs one extra call per line over reading the block in one go, and buys
     accuracy on exactly the inputs that need it. The results join the same
     candidate pool as every other variant, so a per-line reading has to win the
-    same votes as anything else — it is extra evidence, not a shortcut.
+    same votes as anything else, so it is extra evidence rather than a shortcut.
     """
     lines: list[str] = []
     for image in images:

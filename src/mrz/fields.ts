@@ -4,8 +4,8 @@
  * TD1 (identity cards, 3x30) and TD3 (passports, 2x44) place these values at
  * different offsets and split them across a different number of lines, but the
  * decoded result is the same set of fields, so everything downstream of
- * parsing — validation reporting, formatting, the Slack reply — is written
- * once against this type.
+ * parsing (validation reporting, formatting, the Slack reply) is written once
+ * against this type.
  */
 
 export type Sex = 'M' | 'F' | 'X';
@@ -18,7 +18,7 @@ export interface MrzFields {
   /** Given names, space-separated when the MRZ holds several. */
   secondaryIdentifier: string;
   documentNumber: string;
-  /** ICAO calls this "nationality". It is NOT the country of birth — no MRZ
+  /** ICAO calls this "nationality". It is not the country of birth; no MRZ
    *  format encodes place of birth. */
   nationality: string;
   /** Raw `YYMMDD` as printed in the MRZ. */

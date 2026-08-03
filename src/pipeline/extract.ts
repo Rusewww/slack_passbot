@@ -93,9 +93,9 @@ export interface Adjudicated {
  * known.
  *
  * This is the only mechanism in the system that can correct a substitution the
- * check digits are blind to — the digit/letter class `0↔A` … `9↔J`. A rule is
- * applied only when the issuer is recognised, so documents from elsewhere pass
- * through untouched.
+ * check digits are blind to, meaning the digit/letter class `0↔A` up to
+ * `9↔J`. A rule applies only when the issuer is recognised, so documents from
+ * elsewhere pass through untouched.
  *
  * A number that cannot be reconciled is left exactly as read and reported as
  * an anomaly; silently "fixing" it to fit a pattern would be inventing data.
@@ -145,8 +145,8 @@ function applyIssuerFormat(
  *
  * Selecting both lines from whichever single variant happened to parse is what
  * this replaces. A variant can produce a flawless line 2 and a badly corrupted
- * line 1, and the check digits will happily certify the pair — because they
- * never looked at line 1.
+ * line 1, and the check digits will certify the pair quite happily, because
+ * they never looked at line 1.
  */
 function adjudicateTd3(
   pool: readonly string[],
@@ -239,10 +239,10 @@ function adjudicateTd3(
  *
  * The upper and middle lines are found by trying every ordered pair of
  * 30-character lines and keeping the one the check digits accept. That is
- * cheaper than it sounds — the pool is small — and it avoids having to
- * classify lines by pattern-matching, which is exactly the kind of heuristic
- * that misfires on a bad read. Proof decides the pairing wherever proof is
- * available.
+ * cheaper than it sounds, because the pool is small, and it avoids having to
+ * classify lines by pattern matching, which is the kind of heuristic that
+ * misfires on a bad read. Where proof is available, proof decides the
+ * pairing.
  *
  * The name line is then chosen by consensus, for the same reason as TD3 line
  * 1: it carries no check digit.
@@ -379,7 +379,7 @@ function diagnose(candidates: SidecarCandidate[]): ExtractionFailureReason {
     return 'check_digits_failed';
   }
   // A long run of MRZ-alphabet characters that is neither 44 nor 30 is very
-  // likely a format we do not decode — TD2, or a visa — rather than noise.
+  // likely a format we do not decode, such as TD2 or a visa, rather than noise.
   if ([...lengths].some((length) => length >= 28)) return 'unsupported_mrz';
   return 'no_mrz_found';
 }

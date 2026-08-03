@@ -3,7 +3,7 @@
  *
  * The sidecar listens on loopback inside the same container. It is not
  * reachable from outside the network namespace, so the interface carries no
- * authentication — the boundary is the container, not the HTTP layer.
+ * authentication. The boundary is the container, not the HTTP layer.
  *
  * The sidecar returns every preprocessing variant it tried. Choosing between
  * them is this side's job, because only this side knows about check digits.

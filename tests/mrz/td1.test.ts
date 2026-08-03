@@ -35,7 +35,7 @@ describe('TD1 fixture', () => {
 describe('compositeInputTd1', () => {
   it('spans both the upper and middle lines', () => {
     // Upper positions 6-30 plus middle 1-7, 9-15 and 19-29, per ICAO 9303
-    // Part 5 — 25 + 7 + 7 + 11 characters.
+    // Part 5, so 25 + 7 + 7 + 11 characters.
     expect(compositeInputTd1(TD1_UPPER, TD1_MIDDLE)).toHaveLength(50);
   });
 });

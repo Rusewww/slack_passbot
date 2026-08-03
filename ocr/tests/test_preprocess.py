@@ -1,8 +1,8 @@
 """Tests for MRZ localisation.
 
-Fixtures are synthesised in-process — a rendered MRZ strip on a page-like
-background. No document image is ever read from disk, so there is nothing
-sensitive in the repository and nothing for CI to leak.
+Fixtures are built in memory: a rendered MRZ strip on a page-like background.
+No document image is ever read from disk, so there is nothing sensitive in the
+repository and nothing for CI to leak.
 """
 
 from __future__ import annotations

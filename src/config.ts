@@ -57,7 +57,7 @@ export type Config = z.infer<typeof EnvSchema>;
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const result = EnvSchema.safeParse(env);
   if (!result.success) {
-    // Print field names and messages only — never the offending values, which
+    // Print field names and messages only, never the offending values, which
     // are secrets.
     const issues = result.error.issues
       .map((issue) => `  - ${issue.path.join('.') || '(root)'}: ${issue.message}`)

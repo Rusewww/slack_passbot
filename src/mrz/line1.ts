@@ -2,8 +2,8 @@
  * Reconstruction of TD3 line 1 from several imperfect OCR readings.
  *
  * Line 1 holds the document code, the issuing state and the holder's name. It
- * carries **no check digit of any kind** — every check digit in ICAO 9303 TD3
- * is computed over line 2. Line 2 can therefore be proven correct; line 1 can
+ * carries no check digit of any kind, because every check digit in ICAO 9303
+ * TD3 is computed over line 2. Line 2 can therefore be proven correct; line 1 can
  * only be judged plausible, and the two must not be selected together as a
  * unit. Doing so is how a perfectly verified line 2 can arrive attached to a
  * garbage name.
@@ -36,8 +36,8 @@ const MAX_CANDIDATE_LENGTH = 60;
 export function extractLine1(line: string): Line1Fields | null {
   if (line.length < MIN_CANDIDATE_LENGTH || line.length > MAX_CANDIDATE_LENGTH) return null;
 
-  // Line 2 also contains `<<` — its personal-number field is filler-padded —
-  // so it has to be excluded explicitly. The issuing state is the cleanest
+  // Line 2 also contains `<<`, since its personal-number field is padded with
+  // filler, so it has to be excluded explicitly. The issuing state is the cleanest
   // discriminator: three letters on line 1, digits on line 2.
   const issuingState = line.slice(2, 5).replace(/<+$/, '');
   if (!/^[A-Z]+$/.test(issuingState)) return null;
@@ -56,7 +56,7 @@ export function extractLine1(line: string): Line1Fields | null {
 /**
  * How much this candidate's opinion is worth.
  *
- * Every signal here is structural — things that are true of a well-formed line
+ * Every signal here is structural: things that are true of a well-formed line
  * 1 and unlikely to survive a bad read. None of them can prove a candidate
  * correct; they only decide whose vote counts for more.
  */

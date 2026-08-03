@@ -1,11 +1,11 @@
 /**
  * Identifies the build that is actually running.
  *
- * This exists because of a real incident: several rounds of fixes were made,
- * committed and tested against, while the process being exercised was a stale
- * `dist/` from an earlier build. Every report came back "unchanged", and the
- * obvious conclusion — that the fixes did not work — was wrong. The bot could
- * not say which code it was, so nobody could tell.
+ * Fixes were once made, committed and tested against over several rounds
+ * while the process actually running was a stale `dist/` from an earlier
+ * build. Every report came back "unchanged", and the obvious conclusion,
+ * that the fixes did not work, was wrong. The bot could not say which code
+ * it was, so nobody could tell.
  *
  * The commit is reported at startup and alongside every decoded result, so a
  * stale binary announces itself instead of quietly misleading the next
@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 export interface BuildInfo {
   /** Short commit hash, or `unknown` when it cannot be determined. */
   commit: string;
-  /** When the running module was written to disk — the build time in practice. */
+  /** When the running module was written to disk, i.e. the build time. */
   builtAt: string;
   /** `dist` when running compiled output, `src` under tsx. */
   running: 'dist' | 'src';

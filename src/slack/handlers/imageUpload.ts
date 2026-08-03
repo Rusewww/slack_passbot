@@ -1,10 +1,10 @@
 /**
  * Intake handler: a user shares an image with the bot.
  *
- * The default intake mode is DM-only. That is the single most effective
- * control in this system — it makes it structurally impossible for decoded
- * passport data to land in a shared channel, because the bot never reads from
- * one and never writes to one.
+ * The default intake mode is DM-only, which is the most effective control in
+ * the system. It makes it impossible for decoded passport data to land in a
+ * shared channel, because the bot never reads from one and never writes to
+ * one.
  */
 
 import type { Logger } from 'pino';

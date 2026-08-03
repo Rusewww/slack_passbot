@@ -5,7 +5,7 @@ thing that can reach it is the Node process in the same container. Do not
 publish this port.
 
 The service is deliberately dumb. It does not know what a check digit is and
-makes no judgement about which reading is correct — it returns every candidate
+makes no judgement about which reading is correct. It returns every candidate
 it produced and lets the caller adjudicate. That keeps all MRZ semantics in one
 place (the TypeScript `src/mrz` module) instead of split across two languages.
 """
@@ -39,7 +39,7 @@ MAX_BODY_BYTES = 12 * 1024 * 1024
 # 2-1 decision. Raising it costs roughly 340 ms per extra reading.
 QUORUM = 3
 
-# No request body, no image dimensions, no recognised text — nothing that could
+# No request body, no image dimensions, no recognised text. Nothing that could
 # reconstruct a document ends up in the sidecar's logs either.
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("passbot.ocr")

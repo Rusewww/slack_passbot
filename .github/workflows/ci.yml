@@ -56,7 +56,7 @@ jobs:
       #
       # Note the operational consequence: this job can go red without any code
       # change, when a new CVE is disclosed against something in the base
-      # image. That is intended — the response is to rebuild on an updated
+      # image. That is intended. The response is to rebuild on an updated
       # base, or to remove the offending component if it isn't needed at
       # runtime (as the Dockerfile does for npm/yarn). Resist the urge to add
       # blanket ignores; the gate is only worth having if red means something.

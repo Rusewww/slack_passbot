@@ -5,7 +5,7 @@ preprocessing is under 40 ms. Call count *is* the performance characteristic,
 so it is pinned here rather than left to drift.
 
 Tesseract is stubbed out. These tests are about control flow, and stubbing also
-means they run on a machine without Tesseract installed — which is where this
+means they run on a machine without Tesseract installed, which is where this
 code is developed.
 """
 

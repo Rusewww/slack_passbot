@@ -36,8 +36,8 @@ describe('repairToIssuerFormat', () => {
 
   it('repairs three simultaneous errors including lost padding', () => {
     // G->6, 0->O, and a trailing `<` read as `6`. The last is not reachable by
-    // any glyph substitution — it is fixed by knowing the number is eight
-    // characters and regenerating the padding.
+    // any glyph substitution. Knowing the number is eight characters long and
+    // regenerating the padding fixes it.
     expect(repairToIssuerFormat('6C0000O06', '8', UKR_PASSPORT)).toEqual(['GC000000<']);
   });
 

@@ -49,9 +49,9 @@ export function formatMrzDate(yymmdd: string): string {
  *
  * ICAO leaves the century implicit. Birth dates cannot be in the future, so a
  * year that would be yet to come belongs to the previous century. Expiry dates
- * use a forward-looking window instead — passports are issued for at most ~10
- * years but may have expired long ago, so we keep the sliding rule symmetric
- * around the reference date.
+ * use a forward-looking window instead. Passports are issued for at most ten
+ * years or so but may have expired long ago, so the sliding rule stays
+ * symmetric around the reference date.
  */
 export function resolveYear(
   yy: string,
