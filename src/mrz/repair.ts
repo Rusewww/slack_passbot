@@ -41,6 +41,16 @@ const CONFUSION_PAIRS: ReadonlyArray<readonly [string, string]> = [
   ['D', 'O'],
   ['E', 'F'],
   ['M', 'N'],
+  // Observed on a real Ukrainian passport photographed at low resolution: the
+  // document number came back with `G`, `M` and `8` read as `C`, `R` and `B`.
+  // The other two pairs were already here; this one was not, so the issuer
+  // format flagged the number but the repair could not reach the right one.
+  //
+  // That reading is worth remembering for another reason. Its three
+  // substitutions shift the weighted sum by -28, +15 and +3, which cancel to
+  // -10, so every check digit including the composite accepted the wrong
+  // number. Only the issuer format caught it.
+  ['M', 'R'],
   ['U', 'V'],
   ['K', '<'],
   ['C', '<'],

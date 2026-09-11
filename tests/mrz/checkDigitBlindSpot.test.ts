@@ -59,6 +59,23 @@ describe('the check-digit blind spot', () => {
     expect(verifyCheckDigit('6C000000<', '8')).toBe(true);
   });
 
+  it('is blind to several substitutions whose shifts cancel modulo ten', () => {
+    // None of G->C (-4), M->R (+5) or 8->B (+3) is a ±10 pair on its own. In
+    // the first three positions their weights are 7, 3 and 1, so the shifts
+    // become -28, +15 and +3, which sum to -10. Seen on a real document: the
+    // wrong number passed every check digit, the composite included, and was
+    // reported as a clean read needing no corrections.
+    const correct = 'GM800000<6UKR9108242F23092571234567890<<<<78';
+    const wrong = correct.replace('GM800000', 'CRB00000');
+
+    expect(computeCheckDigit('GM800000<')).toBe(computeCheckDigit('CRB00000<'));
+    for (const line of [correct, wrong]) {
+      const repaired = repairLine2(line);
+      expect(repaired?.edits).toBe(0);
+      expect(repaired?.line2).toBe(line);
+    }
+  });
+
   it('leaves an invisible substitution untouched through a whole line', () => {
     // The consequence in full: a line whose document number is wrong passes
     // every check digit, including the composite, and repair reports it as a

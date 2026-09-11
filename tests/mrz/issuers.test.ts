@@ -41,6 +41,16 @@ describe('repairToIssuerFormat', () => {
     expect(repairToIssuerFormat('6C0000O06', '8', UKR_PASSPORT)).toEqual(['GC000000<']);
   });
 
+  it('repairs a triple substitution the check digits cannot see', () => {
+    // G->C, M->R and 8->B shift the weighted sum by -28, +15 and +3, which
+    // cancel to -10, so `CRB00000<` carries the same check digit as
+    // `GM800000<` and validates perfectly. The issuer format is the only thing
+    // that can tell them apart, and the confusion table has to be able to walk
+    // all three glyphs back for it to help. It resolves uniquely: every other
+    // two-letter combination reachable from the misread fails the check digit.
+    expect(repairToIssuerFormat('CRB00000<', '6', UKR_PASSPORT)).toEqual(['GM800000<']);
+  });
+
   it('leaves a correct number alone', () => {
     expect(repairToIssuerFormat('XX000000<', '0', UKR_PASSPORT)).toEqual(['XX000000<']);
   });

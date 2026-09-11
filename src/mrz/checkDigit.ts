@@ -18,9 +18,17 @@
  * around. A document number misread as `6C000000` instead of `GC000000`
  * satisfies its check digit perfectly, composite included.
  *
- * Arithmetic cannot recover these. The only defence is redundancy: agreement
- * across independent readings of the same strip. See `isInvisibleToCheckDigit`
- * below, and the consensus vote in `pipeline/extract.ts`.
+ * Nor is the blind spot limited to single characters. Several substitutions
+ * whose weighted shifts happen to cancel modulo 10 are just as invisible, and
+ * they need not be ±10 pairs individually: `G→C`, `M→R` and `8→B` in the first
+ * three positions shift the sum by -28, +15 and +3, which is -10. That exact
+ * triple has been seen on a real document, and it passed the composite too.
+ *
+ * Arithmetic cannot recover these. The defences are redundancy, meaning
+ * agreement across independent readings of the same strip, and structure,
+ * meaning an issuer's known document-number format. See
+ * `isInvisibleToCheckDigit` below, the consensus vote in `pipeline/extract.ts`
+ * and the rules in `issuers.ts`.
  */
 
 const WEIGHTS = [7, 3, 1] as const;
