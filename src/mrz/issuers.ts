@@ -7,8 +7,8 @@
  * digits cannot.
  *
  * A mod-10 checksum is blind to any substitution that shifts a character's
- * value by a multiple of 10 — the digit/letter pairs `0↔A` … `9↔J`, which
- * includes `6↔G`, one of the commonest OCR-B confusions. `6C000000` and
+ * value by a multiple of 10. That covers the digit/letter pairs `0↔A` up to
+ * `9↔J`, which includes `6↔G`, one of the commonest OCR-B confusions. `6C000000` and
  * `GC000000` satisfy the same check digit, and no amount of arithmetic can
  * separate them. A rule saying "this issuer's passport numbers are two letters
  * followed by six digits" separates them immediately.
@@ -70,9 +70,9 @@ export function matchesRule(documentNumber: string, rule: DocumentNumberRule): b
  *
  * Only the first `rule.length` characters are considered; the remainder of the
  * field is padding and is regenerated rather than corrected. That matters,
- * because the padding is itself a common casualty — a trailing `<` misread as
- * `6` is not reachable by any glyph-confusion substitution, but is trivially
- * fixed by knowing the number is eight characters long.
+ * because the padding is itself a common casualty. A trailing `<` misread as
+ * `6` is not reachable by any glyph-confusion substitution, but knowing the
+ * number is eight characters long fixes it trivially.
  *
  * Returns candidates nearest to the original first. An empty result means the
  * reading cannot be reconciled, which is itself worth reporting.

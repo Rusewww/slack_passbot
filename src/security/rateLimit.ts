@@ -2,8 +2,8 @@
  * Per-user sliding-window rate limiter.
  *
  * In-memory on purpose: the service is a single small instance, and a shared
- * store would add a dependency that holds user identifiers — state we would
- * then have to secure and expire. If this ever scales horizontally, replace
+ * store would add a dependency holding user identifiers, state we would then
+ * have to secure and expire. If this ever scales horizontally, replace
  * the Map with a Redis sorted set behind the same interface.
  */
 

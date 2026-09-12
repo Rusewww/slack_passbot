@@ -2,7 +2,7 @@
  * Test fixtures.
  *
  * The only document data in this repository is the ICAO/Wikipedia specimen
- * passport — a published sample with the reserved document number `XX000000`.
+ * passport, a published sample with the reserved document number `XX000000`.
  * Real documents must never be committed; see docs/SECURITY.md.
  */
 
@@ -15,8 +15,8 @@ export const SPECIMEN_EXPECTED_OUTPUT =
 /**
  * A TD1 identity card for the same fictional holder: three lines of 30.
  *
- * Constructed rather than transcribed — the check digits were computed from
- * the field values, not copied from a real card. `XX0000000` mirrors the
+ * Constructed rather than transcribed. The check digits were computed from the
+ * field values, not copied from a real card, and `XX0000000` mirrors the
  * reserved specimen document number.
  */
 export const TD1_UPPER = 'IDUKRXX000000000000000000000<<';

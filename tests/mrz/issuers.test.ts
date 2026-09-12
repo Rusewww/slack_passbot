@@ -36,9 +36,19 @@ describe('repairToIssuerFormat', () => {
 
   it('repairs three simultaneous errors including lost padding', () => {
     // G->6, 0->O, and a trailing `<` read as `6`. The last is not reachable by
-    // any glyph substitution — it is fixed by knowing the number is eight
-    // characters and regenerating the padding.
+    // any glyph substitution. Knowing the number is eight characters long and
+    // regenerating the padding fixes it.
     expect(repairToIssuerFormat('6C0000O06', '8', UKR_PASSPORT)).toEqual(['GC000000<']);
+  });
+
+  it('repairs a triple substitution the check digits cannot see', () => {
+    // G->C, M->R and 8->B shift the weighted sum by -28, +15 and +3, which
+    // cancel to -10, so `CRB00000<` carries the same check digit as
+    // `GM800000<` and validates perfectly. The issuer format is the only thing
+    // that can tell them apart, and the confusion table has to be able to walk
+    // all three glyphs back for it to help. It resolves uniquely: every other
+    // two-letter combination reachable from the misread fails the check digit.
+    expect(repairToIssuerFormat('CRB00000<', '6', UKR_PASSPORT)).toEqual(['GM800000<']);
   });
 
   it('leaves a correct number alone', () => {

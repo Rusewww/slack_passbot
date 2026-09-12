@@ -21,19 +21,19 @@ const FAILURE_MESSAGE: Record<ExtractionFailureReason, string> = {
     'I could not find a machine readable zone in that image. Make sure the two lines of `<<<` characters along the bottom of the document are fully inside the frame.',
   unreadable:
     'I found the MRZ but could not read it reliably. A flatter angle and more even lighting usually fixes this.',
-  // Failing check digits no longer cause a refusal — a partial reading is
-  // returned with a warning instead. This reason now means the recogniser
-  // could not assemble a reading at all, usually because the name line was
-  // too damaged to identify.
+  // Failing check digits do not cause a refusal; a partial reading goes out
+  // with a warning instead. This reason means the recogniser could not
+  // assemble a reading at all, usually because the name line was too damaged
+  // to identify.
   check_digits_failed:
-    'I found the MRZ but could not make out enough of it to report anything — the name line in particular was unreadable. Please retake the photo straight-on, with the whole bottom strip in focus.',
+    'I found the MRZ but could not make out enough of it to report anything. The name line in particular was unreadable. Please retake the photo straight-on, with the whole bottom strip in focus.',
   name_unreadable:
     'I read the document number and dates, but nothing on the name line was legible enough to be a name. Rather than report characters I know are wrong, I am reporting nothing. Please retake the photo with the whole bottom strip sharp and evenly lit.',
   unsupported_mrz:
     'I found a machine readable zone, but not in a layout I decode. I read passports (TD3: two lines of 44 characters) and identity cards (TD1: three lines of 30). Visas and older card formats are not supported yet.',
   unsupported_format: 'That file type is not supported. Send a JPEG, PNG or HEIC photo.',
   too_large: 'That image is larger than I accept. Send a photo under 10 MB.',
-  ocr_unavailable: 'The recognition service is not responding. This has been logged — try again shortly.',
+  ocr_unavailable: 'The recognition service is not responding. This has been logged; try again shortly.',
   timeout: 'Processing took too long and was stopped. Please try again.',
 };
 
@@ -49,8 +49,8 @@ const CHECKS: ReadonlyArray<{ key: keyof ExtractionSuccess['validation']; label:
 /**
  * Which fields a reading proves, and which it merely guesses.
  *
- * `personalNumber` is skipped for TD1, which defines no such check digit —
- * reporting it as "verified" there would be claiming a guarantee that does not
+ * `personalNumber` is skipped for TD1, which defines no such check digit.
+ * Reporting it as "verified" there would claim a guarantee that does not
  * exist.
  */
 function verificationBreakdown(result: ExtractionSuccess): { verified: string[]; failed: string[] } {
@@ -93,7 +93,7 @@ export function successBlocks(result: ExtractionSuccess): KnownBlock[] {
       text: {
         type: 'mrkdwn',
         text: [
-          ':warning: *Some check digits did not verify — treat this reading as unconfirmed.*',
+          ':warning: *Some check digits did not verify. Treat this reading as unconfirmed.*',
           `Failed: *${failed.join(', ')}*. Compare those fields against the document before using them.`,
         ].join('\n'),
       },
@@ -127,7 +127,7 @@ export function successBlocks(result: ExtractionSuccess): KnownBlock[] {
   const context = [
     `${status} · name never check-digit protected · ${SOURCE_LABEL[result.source]}`,
     result.edits > 0 ? `${result.edits} character(s) corrected` : null,
-    'Not stored — this message is the only copy.',
+    'Not stored, this message is the only copy.',
     // So a stale binary announces itself instead of being blamed on the code.
     `build ${buildLabel()}`,
   ]
@@ -163,7 +163,7 @@ export function rateLimitedBlocks(): KnownBlock[] {
 export const HELP_TEXT = [
   '*passbot* reads the machine readable zone from a passport photo.',
   '',
-  'Send me a photo *in this direct message* — include the two lines of `<<<` characters',
+  'Send me a photo *in this direct message*, including the two lines of `<<<` characters',
   'along the bottom of the document, shot straight-on and in focus.',
   '',
   'I reply with the decoded string and nothing else: the image is processed in memory,',

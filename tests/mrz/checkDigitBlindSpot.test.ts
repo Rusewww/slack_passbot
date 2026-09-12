@@ -11,9 +11,9 @@ import { repairLine2 } from '../../src/mrz/repair.js';
 /**
  * A mod-10 checksum cannot detect a substitution that shifts a character's
  * value by a multiple of 10, because every weight (7, 3, 1) times 10 is itself
- * ≡ 0 mod 10. Character values are 0-9 for digits and 10-35 for A-Z, so the
- * pairs `0↔A` … `9↔J` are exactly ten apart — and `6↔G` is among the most
- * common OCR-B confusions there is.
+ * ≡ 0 mod 10. Character values are 0-9 for digits and 10-35 for A-Z, which
+ * leaves the pairs `0↔A` up to `9↔J` exactly ten apart, and `6↔G` is among the
+ * most common OCR-B confusions there is.
  *
  * These tests pin the limitation down so nobody later mistakes "the check
  * digit verified" for "the field is correct" in this specific class.
@@ -59,6 +59,23 @@ describe('the check-digit blind spot', () => {
     expect(verifyCheckDigit('6C000000<', '8')).toBe(true);
   });
 
+  it('is blind to several substitutions whose shifts cancel modulo ten', () => {
+    // None of G->C (-4), M->R (+5) or 8->B (+3) is a ±10 pair on its own. In
+    // the first three positions their weights are 7, 3 and 1, so the shifts
+    // become -28, +15 and +3, which sum to -10. Seen on a real document: the
+    // wrong number passed every check digit, the composite included, and was
+    // reported as a clean read needing no corrections.
+    const correct = 'GM800000<6UKR9108242F23092571234567890<<<<78';
+    const wrong = correct.replace('GM800000', 'CRB00000');
+
+    expect(computeCheckDigit('GM800000<')).toBe(computeCheckDigit('CRB00000<'));
+    for (const line of [correct, wrong]) {
+      const repaired = repairLine2(line);
+      expect(repaired?.edits).toBe(0);
+      expect(repaired?.line2).toBe(line);
+    }
+  });
+
   it('leaves an invisible substitution untouched through a whole line', () => {
     // The consequence in full: a line whose document number is wrong passes
     // every check digit, including the composite, and repair reports it as a
@@ -94,7 +111,7 @@ describe('trailing filler artifacts in given names', () => {
   it('does not erode a surname that genuinely ends in K', () => {
     // Ukrainian surnames ending in K are common. The rule applies to given
     // names only, because a surname is followed by `<<` and more name, never
-    // by padding — so a final K there is never this artifact.
+    // by padding, so a final K there is never this artifact.
     const variants = [
       'KOVALCHUK<<OLENA<<<<<<<<<<<<<<<<<<<<<<<<',
       'KOVALCHUK<<OLENA<<<<<<<<<<<<<<<<KKKKKKKK',

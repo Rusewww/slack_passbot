@@ -2,20 +2,20 @@
  * The name field, and the consensus machinery used to recover it.
  *
  * Both supported formats put the holder's name outside the reach of every
- * check digit — TD3 on line 1, TD1 on line 3. Those characters can never be
+ * check digit: TD3 on line 1, TD1 on line 3. Those characters can never be
  * proven correct, only judged plausible, so they are handled separately from
  * the fields the arithmetic covers.
  *
- * What stands in for proof is redundancy. The OCR sidecar returns one reading
- * per preprocessing variant, giving several independent attempts at the same
- * strip. Errors differ between attempts; the truth tends to repeat. So each
- * field is decided by a weighted majority across variants rather than by
- * trusting whichever single reading happened to look well-formed.
+ * Redundancy stands in for proof. The OCR sidecar returns one reading per
+ * preprocessing variant, which gives several independent attempts at the same
+ * strip. The errors differ between attempts while the correct characters tend
+ * to repeat, so each field is decided by a weighted majority rather than by
+ * trusting whichever single reading happened to look well formed.
  *
- * The dominant error is the filler `<` being recognised as a letter — `K`,
- * `E`, `S`, `X` — because the stock `eng` Tesseract model has no OCR-B
- * chevron. A name field is mostly filler, so that noise lands overwhelmingly
- * in the padding after the name, where per-field voting discards it.
+ * Most of the damage comes from the filler `<` being recognised as a letter,
+ * usually `K`, `E`, `S` or `X`, because the stock `eng` Tesseract model has no
+ * OCR-B chevron. A name field is mostly filler, so that noise lands in the
+ * padding after the name, where per-field voting throws it away.
  */
 
 export interface NameFields {
@@ -56,7 +56,7 @@ export function nameComponents(field: string): { surname: string; given: string[
  * Plausibility bounds for a name.
  *
  * ICAO gives the whole name field 39 characters on TD3 and 30 on TD1, so a
- * single component longer than this is not a name — it is a run of
+ * single component longer than this is not a name at all. It is a run of
  * misrecognised padding. Nor does an MRZ carry five given names; the field is
  * truncated long before that.
  */
@@ -70,11 +70,11 @@ const NAME_COMPONENT = /^[A-Z]+$/;
 const MAX_REPEATED_RUN = 3;
 
 /**
- * True for a component that is the same letter over and over — `KKKKKKKK`.
+ * True for a component that is the same letter over and over, like `KKKKKKKK`.
  *
- * This is what misread padding looks like once it has been mistaken for a
- * name, and no real name resembles it. Short repeats are left alone so that
- * nothing legitimate is caught.
+ * That is what misread padding looks like once it has been mistaken for a
+ * name, and no real name resembles it. Short repeats are left alone so nothing
+ * legitimate gets caught.
  */
 function isRepeatedLetter(component: string): boolean {
   return component.length > MAX_REPEATED_RUN && new Set(component).size === 1;
@@ -83,15 +83,15 @@ function isRepeatedLetter(component: string): boolean {
 /**
  * Reads a name field, or null when it cannot be one.
  *
- * Every component is checked, not only the surname. That distinction caused a
- * real failure twice over: readings of `EVA ERI LEILAKKK6660CKREKKKKRKCK` and
- * `KKKKKKKKKKKKKKKK` were both accepted and delivered as names, because only
- * the surname had ever been tested for being alphabetic.
+ * Every component is checked, not only the surname. Checking the surname alone
+ * lets through readings like `EVA ERI LEILAKKK6660CKREKKKKRKCK` or a surname
+ * of sixteen K's, both of which are obviously wrong to a reader and were
+ * obviously wrong to nothing else in the pipeline.
  *
- * Rejecting here is safe in a way that guessing is not. The name is the one
- * part of an MRZ no check digit protects, so a reading that fails these basic
- * structural tests is the only evidence available that it is wrong — and it is
- * conclusive evidence. Digits do not occur in names.
+ * Rejecting here is safe in a way that guessing is not. No check digit
+ * protects the name, so failing one of these structural tests is the only
+ * evidence available that a reading is wrong. It is also conclusive evidence:
+ * digits do not occur in names.
  */
 export function extractNames(field: string): NameFields | null {
   // Every name field separates surname from given names with `<<`. Without it
@@ -126,10 +126,10 @@ export function fillerRatio(line: string): number {
 /**
  * Characters Tesseract most often emits in place of the filler `<`.
  *
- * Deliberately narrow. `S`, `C` and `R` also occur as filler misreads but are
- * common name endings — `DENYS`, `IHOR` — and crediting a shortened reading on
- * their account would corrupt real names. `K` is the dominant artifact by a
- * wide margin.
+ * Kept narrow on purpose. `S`, `C` and `R` also turn up as filler misreads,
+ * but they are common name endings (`DENYS`, `IHOR`), and crediting a
+ * shortened reading on their account would corrupt real names. `K` is the
+ * dominant artifact by a wide margin.
  */
 const FILLER_ARTIFACTS = new Set(['K', 'E', 'X']);
 
@@ -137,17 +137,16 @@ const FILLER_ARTIFACTS = new Set(['K', 'E', 'X']);
  * Credits a reading whose only difference from another is one trailing filler
  * artifact.
  *
- * When the padding after a name is misread, the first stray character attaches
- * itself to the name: `MARIANA` becomes `MARIANAK`. Both readings then appear
- * across variants, and plain majority can pick the wrong one. The prior that
- * settles it is directional — OCR turns `<` into a letter far more readily
- * than it drops a real letter — so the shorter reading inherits the weight of
- * the longer one it prefixes.
+ * When the padding after a name is misread, the first stray character sticks
+ * to the name: `MARIANA` becomes `MARIANAK`. Both readings then show up across
+ * variants, and a plain majority can pick the wrong one. What settles it is
+ * that the error only runs one way. OCR turns `<` into a letter far more
+ * readily than it drops a real letter, so the shorter reading inherits the
+ * weight of the longer one it prefixes.
  *
- * Applied to given names only. A surname is followed by `<<` and then more
- * name, not by padding, so a surname ending in `K` — `KOVALCHUK` and the many
- * Ukrainian surnames like it — is never this artifact and must not be eroded
- * by this rule.
+ * Given names only. A surname is followed by `<<` and then more name rather
+ * than by padding, so a surname ending in `K`, of which Ukrainian has plenty,
+ * is never this artifact and must not be eroded by the rule.
  */
 function creditTrailingArtifacts(
   entries: ReadonlyArray<{ value: string; weight: number }>,

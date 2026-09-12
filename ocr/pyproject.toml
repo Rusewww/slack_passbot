@@ -14,7 +14,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.3", "ruff>=0.9"]
+# `httpx2` is not used directly by any test. It is what `fastapi.testclient`
+# (really `starlette.testclient`) imports to drive the app, and starlette does
+# not declare it: it imports `httpx2`, falls back to the older `httpx`, and
+# raises at import time when neither is present. Undeclared, the suite passes
+# on any machine that happens to have one of them and fails on a clean install,
+# which is exactly what CI does.
+dev = ["pytest>=8.3", "ruff>=0.9", "httpx2>=2.0"]
 
 [tool.ruff]
 line-length = 100

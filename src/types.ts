@@ -15,8 +15,8 @@ export interface ExtractionSuccess {
   validation: Td3Validation;
   format: MrzFormat;
   /**
-   * Problems no check digit can express — a document number that does not fit
-   * its issuer's known format, for instance. Shown to the user as warnings.
+   * Problems no check digit can express, such as a document number that does
+   * not fit its issuer's known format. Shown to the user as warnings.
    */
   anomalies: string[];
   source: ExtractionSource;

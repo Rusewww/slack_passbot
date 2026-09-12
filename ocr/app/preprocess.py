@@ -6,9 +6,9 @@ photo is close to useless. Everything here exists to turn the second into the
 first.
 
 The strategy is deliberately to produce *several* candidate images rather than
-one "best" guess. Deciding which one is right is fast and exact downstream —
-the check digits settle it — so it is better to hand the recogniser a handful
-of plausible renderings than to commit early to a single threshold.
+one "best" guess. Deciding which one is right is fast and exact downstream,
+since the check digits settle it, so handing the recogniser a handful of
+plausible renderings beats committing early to a single threshold.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ import cv2
 import numpy as np
 
 # A single MRZ line is 44 characters of a monospaced font, so it is extremely
-# elongated — far more so than any caption or heading in the visual zone. That
+# elongated, far more so than any caption or heading in the visual zone. That
 # elongation is the primary discriminator.
 MIN_BAR_ASPECT = 12.0
 MIN_BAR_HEIGHT = 5.0
@@ -263,15 +263,16 @@ def _variants(strip: np.ndarray, prefix: str) -> list[Candidate]:
     """
     grey = _upscale(cv2.cvtColor(strip, cv2.COLOR_BGR2GRAY))
 
-    out: list[Candidate] = [Candidate(f"{prefix}:grey", grey)]
+    # Order matters now that the caller stops early: the sooner a quorum of
+    # complete readings is reached, the fewer Tesseract calls are made. Plain
+    # Otsu is the strongest general performer on a high-contrast strip and goes
+    # first; unthresholded grey is the weakest and goes last, as a long shot for
+    # strips the thresholds ruin. This ordering is a heuristic and worth
+    # revisiting against the per-variant timings the sidecar now reports.
+    out: list[Candidate] = []
 
     _, otsu = cv2.threshold(grey, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
     out.append(Candidate(f"{prefix}:otsu", otsu))
-
-    adaptive = cv2.adaptiveThreshold(
-        grey, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 11
-    )
-    out.append(Candidate(f"{prefix}:adaptive", adaptive))
 
     clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8)).apply(grey)
     _, clahe_otsu = cv2.threshold(clahe, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
@@ -281,6 +282,13 @@ def _variants(strip: np.ndarray, prefix: str) -> list[Candidate]:
     # photograph and are soft after upscaling.
     _, sharp_otsu = cv2.threshold(sharpen(grey), 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
     out.append(Candidate(f"{prefix}:sharp-otsu", sharp_otsu))
+
+    adaptive = cv2.adaptiveThreshold(
+        grey, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 11
+    )
+    out.append(Candidate(f"{prefix}:adaptive", adaptive))
+
+    out.append(Candidate(f"{prefix}:grey", grey))
 
     return out
 

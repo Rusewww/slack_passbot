@@ -17,7 +17,7 @@ RUN npm run build && npm prune --omit=dev
 
 # ---------- Stage 2: Python dependencies ----------
 # Built on the *same* base as the runtime stage on purpose. A virtualenv is
-# bound to the exact interpreter that created it — building it on
+# bound to the exact interpreter that created it. Building it on
 # python:3.12-slim and copying it into an image whose `python3` is Debian's
 # 3.11 produces a venv whose symlinks and site-packages path point at an
 # interpreter that isn't there. The image builds green and then fails to start.
@@ -40,11 +40,30 @@ RUN pip install --no-cache-dir \
       "fastapi>=0.115" "uvicorn[standard]>=0.34" "pydantic>=2.10" \
       "opencv-python-headless>=4.11" "numpy>=2.1" "pytesseract>=0.3.13"
 
+# Drop pip now that the venv is built, for the same reason npm and yarn are
+# stripped from the runtime stage below.
+#
+# pip carries its dependencies as a vendored copy rather than as installed
+# packages, and declares them in pip/_vendor/vendor.txt, which the vulnerability
+# scanner reads. That file pins msgpack 1.1.2 and setuptools 70.3.0, both under
+# HIGH advisories, and neither is reachable by upgrading anything: they are not
+# installed distributions, just names in a manifest inside pip. The venv's real
+# setuptools is 84.0.0 and already scans clean.
+#
+# Nothing invokes pip after this line. The container runs `uvicorn` and `node`,
+# and the sidecar imports only fastapi, pydantic, cv2, numpy and pytesseract.
+# So this is the same reduction in attack surface as the npm removal, not a
+# suppression: a package manager in a production image is a convenient way for
+# an attacker with code execution to fetch a payload.
+RUN rm -rf /opt/venv/lib/python*/site-packages/pip \
+           /opt/venv/lib/python*/site-packages/pip-*.dist-info \
+           /opt/venv/bin/pip /opt/venv/bin/pip[0-9]*
+
 
 # ---------- Stage 3: the MRZ recognition model ----------
 # Tesseract's `eng` model has no OCR-B chevron in its training data, so it
 # cannot emit `<` and substitutes K/E/S/C instead. Since an MRZ name field is
-# mostly filler, that destroys names while leaving digits intact — the exact
+# mostly filler, that destroys names while leaving digits intact, which is the
 # failure this addresses.
 #
 # Pinned to a commit and verified by digest: the build fails rather than
@@ -81,12 +100,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # The OCR-B model, into Debian's tessdata directory. `recognise.py` probes for
 # `mrz` and falls back to `eng` if it is absent, so a wrong path here degrades
-# accuracy rather than breaking recognition — check the `tesseract_lang` field
+# accuracy rather than breaking recognition. Check the `tesseract_lang` field
 # on /health to confirm which model is actually loaded.
 COPY --from=tessdata /tmp/mrz.traineddata /usr/share/tesseract-ocr/5/tessdata/mrz.traineddata
 
 # Strip the package managers the base image ships. The container's only job is
-# `node dist/index.js` and `uvicorn` — npm, npx, corepack and yarn are never
+# `node dist/index.js` and `uvicorn`. npm, npx, corepack and yarn are never
 # invoked at runtime, but their bundled dependencies (tar, brace-expansion,
 # picomatch, sigstore) carry HIGH/CRITICAL CVEs that the vulnerability gate
 # rightly refuses to let through. Removing them is a real reduction in attack
@@ -112,8 +131,8 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 USER node
 
 # Baked in so a running container can report which commit it is. Without this
-# a stale image is indistinguishable from a broken fix — which has already
-# cost one round of misdiagnosis. Pass with
+# a stale image is indistinguishable from a broken fix, which has already cost
+# one round of misdiagnosis. Pass with
 # `docker build --build-arg BUILD_COMMIT=$(git rev-parse HEAD)`.
 ARG BUILD_COMMIT=unknown
 

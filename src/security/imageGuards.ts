@@ -3,7 +3,7 @@
  *
  * Everything here runs before a single byte reaches the decoder. The threats
  * being closed off are: content-type spoofing (a `.jpg` that is really an
- * archive or SVG), oversized uploads, and decompression bombs — a 2 KB PNG can
+ * archive or SVG), oversized uploads, and decompression bombs. A 2 KB PNG can
  * expand to gigabytes of pixels and take the process down.
  */
 
@@ -39,7 +39,7 @@ export interface VerifiedImage {
  * Verifies an in-memory upload.
  *
  * The MIME type is derived from magic bytes, not from the filename or the
- * `Content-Type` Slack reports — both are attacker-controlled.
+ * `Content-Type` Slack reports, since both are attacker controlled.
  *
  * Pixel-count limits are enforced downstream in the OCR sidecar, which is the
  * component that actually decodes the image and therefore the only one that
@@ -71,7 +71,7 @@ export async function verifyImage(bytes: Buffer, maxBytes: number): Promise<Veri
  * Best-effort scrub of the buffer once processing is done.
  *
  * Node gives no guarantee the memory is not copied by the GC beforehand, so
- * this is defence in depth rather than a hard erasure guarantee — the real
+ * this is defence in depth rather than a hard erasure guarantee. The real
  * control is that the buffer is never persisted anywhere.
  */
 export function scrub(bytes: Buffer): void {

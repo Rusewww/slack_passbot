@@ -1,5 +1,5 @@
 /**
- * ICAO 9303 Part 5 — TD1 (identity card) machine readable zone.
+ * TD1 (identity card) machine readable zone, per ICAO 9303 Part 5.
  *
  * Three lines of exactly 30 characters. Ukrainian ID cards use this format,
  * as do most national identity documents; passports use TD3.
