@@ -90,7 +90,22 @@ FROM node:22-bookworm-slim AS runtime
 # tesseract-ocr provides the engine; libglib2.0-0 is the one native library the
 # headless OpenCV wheel still links against. tini reaps the two child processes
 # so signals and zombies are handled properly.
-RUN apt-get update && apt-get install -y --no-install-recommends \
+#
+# `apt-get upgrade` is the "rebuild on an updated base" response the vulnerability
+# gate in .github/workflows/ci.yml asks for, applied at build time rather than by
+# waiting on the upstream base image. The base tag is rebuilt on its own schedule,
+# so between rebuilds it carries whatever Debian shipped when it was cut, and
+# `apt-get install` leaves an already-installed package alone even when a patched
+# version is available: libpcre2-8-0 arrived as 10.42-1 (a dependency of glib) and
+# stayed there after 10.42-1+deb12u1 fixed two HIGH advisories, which is what last
+# failed this gate.
+#
+# The cost is that the image is no longer byte-identical across builds. It already
+# was not, since nothing in these apt lines is version-pinned, and picking up
+# security updates is worth more here than a reproducibility that was never real.
+RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends \
         python3 \
         tesseract-ocr \
         tesseract-ocr-eng \
