@@ -36,12 +36,12 @@ describe('successBlocks on a fully verified reading', () => {
   });
 
   it('reports every check digit as verified', () => {
-    expect(textOf(successBlocks(VERIFIED))).toContain('All check digits verified');
+    expect(textOf(successBlocks(VERIFIED))).toContain('Усі дані успішно перевірено');
   });
 
   it('still says the name is not check-digit protected', () => {
     // True even of a perfect read: no MRZ format gives the name a check digit.
-    expect(textOf(successBlocks(VERIFIED))).toContain('name never check-digit protected');
+    expect(textOf(successBlocks(VERIFIED))).toContain("ім'я не перевіряється автоматично");
   });
 
   it('includes the delivery string', () => {
@@ -63,18 +63,18 @@ describe('successBlocks on a partly verified reading', () => {
   });
 
   it('names the checks that failed', () => {
-    expect(textOf(blocks)).toContain('date of expiry');
+    expect(textOf(blocks)).toContain('дата завершення строку дії');
   });
 
   it('names the checks that held, so partial trust is possible', () => {
     const text = textOf(blocks);
-    expect(text).toContain('Check digits confirmed for');
-    expect(text).toContain('document number');
-    expect(text).toContain('date of birth');
+    expect(text).toContain('Успішно перевірено');
+    expect(text).toContain('номер документа');
+    expect(text).toContain('дата народження');
   });
 
   it('does not claim full verification', () => {
-    expect(textOf(blocks)).not.toContain('All check digits verified');
+    expect(textOf(blocks)).not.toContain('Усі дані успішно перевірено');
   });
 });
 
@@ -85,6 +85,6 @@ describe('successBlocks for TD1', () => {
       SPECIMEN_LINE_2.slice(0, 27) + '1' + SPECIMEN_LINE_2.slice(28),
       'TD1',
     );
-    expect(textOf(successBlocks(partialTd1))).not.toContain('personal number');
+    expect(textOf(successBlocks(partialTd1))).not.toContain('особистий номер');
   });
 });

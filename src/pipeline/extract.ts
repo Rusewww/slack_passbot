@@ -123,8 +123,8 @@ function applyIssuerFormat(
 
   anomalies.push(
     candidates.length === 0
-      ? `the document number does not match the expected ${nationality} format (${rule.description}) and could not be reconciled with its check digit`
-      : `the document number is ambiguous: ${candidates.length} readings fit both the ${nationality} format and the check digit`,
+      ? `номер документа не відповідає формату ${nationality} (${rule.description}), тому автоматично перевірити його не вдалося`
+      : `номер документа нечіткий: знайдено кілька можливих варіантів (${candidates.length}) для формату ${nationality}`,
   );
   return line2;
 }

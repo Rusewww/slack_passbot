@@ -7,8 +7,8 @@ const UKR_PASSPORT = ruleFor('UKR', 'TD3')!;
 
 describe('issuer document number rules', () => {
   it('knows Ukrainian passports and identity cards', () => {
-    expect(ruleFor('UKR', 'TD3')?.description).toContain('two letters');
-    expect(ruleFor('UKR', 'TD1')?.description).toContain('nine digits');
+    expect(ruleFor('UKR', 'TD3')?.description).toContain('дві літери');
+    expect(ruleFor('UKR', 'TD1')?.description).toContain("дев'ять цифр");
   });
 
   it('has nothing to say about an issuer it does not know', () => {
