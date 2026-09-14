@@ -13,18 +13,46 @@ plausible renderings beats committing early to a single threshold.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 import cv2
 import numpy as np
+
+# Only ever logs an orientation, never anything derived from the image.
+log = logging.getLogger("passbot.ocr.preprocess")
 
 # A single MRZ line is 44 characters of a monospaced font, so it is extremely
 # elongated, far more so than any caption or heading in the visual zone. That
 # elongation is the primary discriminator.
 MIN_BAR_ASPECT = 12.0
 MIN_BAR_HEIGHT = 5.0
-MIN_BAR_WIDTH_RATIO = 0.30  # of the page width
+# A floor against speckle only, not a prior about where the document sits. It
+# used to be 0.30, which quietly assumed the passport fills the frame: a page
+# at 54% of frame width puts its MRZ lines at 29% and lost them. What actually
+# identifies an MRZ is two or three elongated bars stacked together, and that
+# test lives in `_is_mrz_shaped`, so this one can be permissive.
+MIN_BAR_WIDTH_RATIO = 0.12  # of the page width
 MIN_BAR_CENTRE_Y = 0.40  # MRZ sits in the lower part of the document
+
+# An MRZ is never a single line: TD3 passports have two, TD1 cards three. A
+# lone bar, however long, is a table edge, a rule, or one MRZ line seen
+# side-on. Rejecting it outright is what makes the rotation search below safe.
+MIN_MRZ_LINES = 2
+MAX_MRZ_LINES = 3
+
+# Tried, in order, only when the upright image yields no MRZ. Sideways is the
+# common phone mistake, so the two quarter turns go first.
+ROTATIONS = (
+    cv2.ROTATE_90_CLOCKWISE,
+    cv2.ROTATE_90_COUNTERCLOCKWISE,
+    cv2.ROTATE_180,
+)
+_ROTATION_DEGREES = {
+    cv2.ROTATE_90_CLOCKWISE: 90,
+    cv2.ROTATE_90_COUNTERCLOCKWISE: 270,
+    cv2.ROTATE_180: 180,
+}
 
 # Two consecutive MRZ lines are close together relative to their own height,
 # and near-perfectly aligned horizontally.
@@ -184,19 +212,26 @@ def _group_bars(bars: list[_Bar]) -> list[list[_Bar]]:
     return groups
 
 
-def _score(group: list[_Bar]) -> float:
-    """Ranks candidate blocks; a two- or three-line block is the expected shape.
+def _is_mrz_shaped(group: list[_Bar]) -> bool:
+    """Whether a block has the line count of an MRZ: two for TD3, three for TD1.
 
-    TD3 passports have two MRZ lines and TD1 identity cards have three, so a
-    group of that size is far more likely to be the MRZ than a lone bar that
-    happens to be elongated.
+    This used to be a scoring bonus rather than a requirement, and a lone bar
+    could still win. Rotated a quarter turn, the two MRZ lines become vertical
+    strips that pass every per-bar filter but sit side by side, so they never
+    group, and the larger one was crowned the MRZ on its own. Making the line
+    count a hard gate is what closes that, and it is also what lets the width
+    floor above be relaxed without letting strays through.
     """
-    shape_bonus = 2.0 if 2 <= len(group) <= 3 else 1.0
-    return shape_bonus * sum(bar.width * bar.height for bar in group)
+    return MIN_MRZ_LINES <= len(group) <= MAX_MRZ_LINES
 
 
-def locate_mrz(image: np.ndarray) -> np.ndarray | None:
-    """Finds the MRZ block and returns it deskewed, or None if not found."""
+def _score(group: list[_Bar]) -> float:
+    """Ranks MRZ-shaped blocks against each other by ink area."""
+    return sum(bar.width * bar.height for bar in group)
+
+
+def _locate_upright(image: np.ndarray) -> tuple[float, np.ndarray] | None:
+    """Finds the MRZ in the image as given. Returns (score, deskewed crop)."""
     mask = _text_mask(image)
     if mask is None:
         return None
@@ -206,11 +241,47 @@ def locate_mrz(image: np.ndarray) -> np.ndarray | None:
     if not bars:
         return None
 
-    best = max(_group_bars(bars), key=_score)
+    shaped = [group for group in _group_bars(bars) if _is_mrz_shaped(group)]
+    if not shaped:
+        return None
+
+    best = max(shaped, key=_score)
 
     # One rotated rectangle spanning every bar in the winning group.
     points = np.vstack([cv2.boxPoints(cv2.minAreaRect(bar.contour)) for bar in best])
-    return _deskew(image, cv2.minAreaRect(points.astype(np.float32)))
+    return _score(best), _deskew(image, cv2.minAreaRect(points.astype(np.float32)))
+
+
+def locate_mrz(image: np.ndarray) -> np.ndarray | None:
+    """Finds the MRZ block and returns it deskewed, or None if not found.
+
+    Tries the image upright first, which is the common case and costs nothing
+    extra. Only when that finds nothing does it try the three other
+    orientations, keeping the best MRZ-shaped block among them. A passport
+    held sideways for the photo is the usual reason to get here.
+
+    Note that the escalation is safe only because `_is_mrz_shaped` rejects
+    lone bars: without that, a wrong orientation can return a plausible-looking
+    sliver and the search would stop on it.
+    """
+    upright = _locate_upright(image)
+    if upright is not None:
+        return upright[1]
+
+    best: tuple[float, np.ndarray, int] | None = None
+    for rotation in ROTATIONS:
+        found = _locate_upright(cv2.rotate(image, rotation))
+        if found is None:
+            continue
+        score, crop = found
+        if best is None or score > best[0]:
+            best = (score, crop, _ROTATION_DEGREES[rotation])
+
+    if best is None:
+        return None
+
+    log.info("MRZ located after rotating the image by %d degrees", best[2])
+    return best[1]
 
 
 def _deskew(image: np.ndarray, rect) -> np.ndarray:

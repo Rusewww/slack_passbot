@@ -83,6 +83,51 @@ class TestLocateMrz:
 
         assert locate_mrz(rotated) is not None
 
+    @pytest.mark.parametrize(
+        "rotation",
+        [cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_180, cv2.ROTATE_90_COUNTERCLOCKWISE],
+        ids=["90", "180", "270"],
+    )
+    def test_recovers_a_page_photographed_sideways_or_upside_down(self, rotation) -> None:
+        # A passport held sideways for the photo. The crop must come back
+        # upright, which is what the aspect check proves: the strip is wide,
+        # not tall.
+        located = locate_mrz(cv2.rotate(synthetic_passport(), rotation))
+
+        assert located is not None
+        height, width = located.shape[:2]
+        assert width / height > 3.0
+
+    def test_rejects_a_lone_bar_however_long(self) -> None:
+        # A single elongated dark run is a table edge or a rule, never an MRZ.
+        # Before this was a hard requirement, a page rotated a quarter turn
+        # produced exactly this: one of its two MRZ lines seen side-on, alone,
+        # accepted as the MRZ.
+        page = np.full((850, 1200, 3), 235, dtype=np.uint8)
+        cv2.rectangle(page, (40, 700), (1100, 716), (20, 20, 20), -1)
+
+        assert locate_mrz(page) is None
+
+    def test_finds_a_passport_that_fills_only_part_of_a_cluttered_frame(self) -> None:
+        # The passport is small in a busy frame: a dark cover, a hand-sized
+        # blob, and streaky background. Its MRZ lines come out well under the
+        # old 30%-of-frame width floor, which used to lose them outright.
+        frame = np.full((1600, 2000, 3), 110, dtype=np.uint8)
+        frame[::7] = 135  # streaks, as on a wooden table
+        cv2.rectangle(frame, (250, 150), (1750, 1450), (40, 40, 45), -1)
+        cv2.ellipse(frame, (350, 300), (220, 140), 30, 0, 360, (150, 170, 210), -1)
+
+        small = cv2.resize(synthetic_passport(), None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
+        h, w = small.shape[:2]
+        y0, x0 = (1600 - h) // 2, (2000 - w) // 2
+        frame[y0 : y0 + h, x0 : x0 + w] = small
+
+        located = locate_mrz(frame)
+
+        assert located is not None
+        height, width = located.shape[:2]
+        assert width / height > 3.0
+
 
 class TestBuildCandidates:
     def test_always_produces_candidates(self) -> None:
