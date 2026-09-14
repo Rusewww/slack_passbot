@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import { computeCheckDigit } from '../../src/mrz/checkDigit.js';
 import { formatPassbotLine } from '../../src/mrz/format.js';
-import { parseTd3 } from '../../src/mrz/td3.js';
+import { compositeInput, parseTd3 } from '../../src/mrz/td3.js';
 import { successBlocks } from '../../src/slack/reply.js';
 import type { ExtractionSuccess } from '../../src/types.js';
 import { SPECIMEN_EXPECTED_OUTPUT, SPECIMEN_LINE_1, SPECIMEN_LINE_2 } from '../fixtures/specimen.js';
@@ -86,5 +87,22 @@ describe('successBlocks for TD1', () => {
       'TD1',
     );
     expect(textOf(successBlocks(partialTd1))).not.toContain('особистий номер');
+  });
+});
+
+describe('successBlocks when the personal number is not used', () => {
+  it('lists it neither as verified nor as failed', () => {
+    // An issuer that leaves the field empty fills positions 29-43 with `<`.
+    // Its check digit then passes by definition, since there is nothing to
+    // check, and reporting that as "verified" would claim a check that never
+    // ran. The reading is made partial so the verified list actually renders.
+    const unused = SPECIMEN_LINE_2.slice(0, 28) + '<'.repeat(15);
+    const withComposite = unused.slice(0, 43) + computeCheckDigit(compositeInput(unused));
+    const partial = withComposite.slice(0, 27) + '1' + withComposite.slice(28);
+
+    const text = textOf(successBlocks(build(partial)));
+
+    expect(text).toContain('номер документа');
+    expect(text).not.toContain('особистий номер');
   });
 });

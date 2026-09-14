@@ -59,6 +59,10 @@ function verificationBreakdown(result: ExtractionSuccess): { verified: string[];
 
   for (const { key, label } of CHECKS) {
     if (key === 'personalNumber' && result.format === 'TD1') continue;
+    // An issuer that does not use the personal number leaves it as filler
+    // with a `<` check digit. That is "not present", and listing it as
+    // verified would claim a check that never ran.
+    if (key === 'personalNumber' && result.fields.personalNumber === '') continue;
     (result.validation[key] ? verified : failed).push(label);
   }
 

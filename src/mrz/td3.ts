@@ -139,7 +139,13 @@ export function validateLine2(line2: string): Td3Validation {
     documentNumber: verifyCheckDigit(documentNumberRaw, slice(line2, o2.documentNumberCheck)),
     birthDate: verifyCheckDigit(birthDate, slice(line2, o2.birthDateCheck)),
     expiryDate: verifyCheckDigit(expiryDate, slice(line2, o2.expiryDateCheck)),
-    personalNumber: verifyCheckDigit(personalNumberRaw, slice(line2, o2.personalNumberCheck)),
+    // The one field whose check digit may legitimately be `<`: it is optional,
+    // and an issuer that does not use it may leave the digit as `0` or `<`.
+    personalNumber: verifyCheckDigit(
+      personalNumberRaw,
+      slice(line2, o2.personalNumberCheck),
+      true,
+    ),
     composite:
       computeCheckDigit(compositeInput(line2)) === Number(slice(line2, o2.compositeCheck)),
     allValid: false,

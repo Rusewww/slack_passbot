@@ -24,6 +24,7 @@ import {
   bestEffortLine2,
   bestEffortTd1Lines,
   countVerified,
+  provesMandatoryField,
   repairLine2,
   repairTd1Lines,
   repairTd3,
@@ -199,6 +200,10 @@ function adjudicateTd3(
     for (const line of lines) {
       const attempt = bestEffortLine2(line);
       if (!attempt) continue;
+      // Nothing mandatory proven means nothing worth delivering. Without this
+      // gate, line 1 could be salvaged *as* line 2 whenever the real line 2
+      // was unreadable: its filler landed in the check-digit slots and passed.
+      if (!provesMandatoryField(attempt.validation)) continue;
 
       const verified = countVerified(attempt.validation);
       if (
@@ -294,6 +299,8 @@ function adjudicateTd1(
 
         const attempt = bestEffortTd1Lines(upper, middle);
         if (!attempt) continue;
+        // Same bar as TD3: a pairing that proves no mandatory field is noise.
+        if (!provesMandatoryField(attempt.validation)) continue;
 
         const verified = countVerified(attempt.validation);
         const candidate = { ...attempt.reading, edits: attempt.edits };
@@ -468,7 +475,9 @@ export async function extractMrz(image: ImageInput, deps: PipelineDeps): Promise
     }
 
     const salvaged = bestEffortLine2(visionLines[1]);
-    if (salvaged) {
+    // The vision path had the same hole as Tesseract's: a model that hands
+    // back line 1 twice would have had its second copy delivered as line 2.
+    if (salvaged && provesMandatoryField(salvaged.validation)) {
       const partial = tryParse([visionLines[0], salvaged.reading]);
       if (partial) {
         log.info(
