@@ -1,11 +1,13 @@
-# Running and deploying passbot
+# Running passbot
 
 Written for Windows 11 with PowerShell, which is where this was developed. The
-Docker and Fly paths are platform independent.
+Docker path is platform independent.
+
+The bot runs on your own machine. There is no hosted deployment, and no step
+below asks you to create an account anywhere except Slack.
 
 If you just want to watch MRZ decoding work, skip to
-[Step 3](#step-3-smoke-test-without-slack). It needs no Slack app and no
-deployment.
+[Step 3](#step-3-smoke-test-without-slack). It needs no Slack app at all.
 
 ---
 
@@ -36,8 +38,8 @@ Required for anything involving Slack, though not for the smoke test in Step 3.
 4. Under Install App, install to the workspace and allow. The Bot User OAuth
    Token, `xoxb-…`, is your `SLACK_BOT_TOKEN`.
 
-Both tokens are secrets. They belong in `.env` locally (git-ignored) or in
-`fly secrets` in production, never in a committed file.
+Both tokens are secrets. They belong in `.env`, which is git-ignored, and never
+in a committed file.
 
 ### Create your `.env`
 
@@ -227,51 +229,26 @@ the OCR variants, so verify it by eye even when everything else passes.
 
 ---
 
-## Step 5. Deploy to Fly.io
+## Keeping it running
 
-```bash
-winget install --id Fly-io.flyctl -e
-```
+The bot answers only while the process is up. Socket Mode holds an outbound
+WebSocket to Slack, so an upload reaches the bot only if it is connected at
+that moment; nothing queues events for it while it is down. Closing the
+terminal, sleeping the machine or dropping the network all mean uploads are
+missed, not delayed.
 
-```bash
-fly auth login
-```
+That is the trade this project makes deliberately. Running on a machine you
+control is what keeps the image, the decoded fields and the logs off anyone
+else's infrastructure — see [SECURITY.md](SECURITY.md). If you later need the
+bot answering at times your machine is not on, that is a hosting decision with
+real consequences for the threat model, not a configuration change.
 
-Fly app names are globally unique, so `passbot` in [`fly.toml`](../fly.toml) is
-almost certainly taken. Pick your own and edit the `app = ` line to match:
-
-```bash
-fly apps create passbot-yourname
-```
-
-Set the secrets before deploying. The app validates its configuration at boot
-and exits if a token is missing, so deploying first only gets you a crash loop:
-
-```bash
-fly secrets set SLACK_BOT_TOKEN=xoxb-... SLACK_APP_TOKEN=xapp-...
-```
-
-```bash
-fly deploy
-```
-
-Fly builds the image on a remote builder, so you don't need Docker running
-locally for this.
-
-```bash
-fly logs
-```
-
-There is no public URL, and that's correct. Socket Mode dials out to Slack, so
-the app has no inbound port and no public IP. `fly.toml` has no `[[services]]`
-section for that reason. Don't add one.
-
-### Machine sizing
-
-One `shared-cpu-1x` machine with 512 MB, always on, no database and no queue.
-Don't enable auto-stop, because the process has to stay connected to Slack to
-receive events. 256 MB is not enough; OpenCV needs headroom to decode large
-photographs.
+One caution if you run more than one copy. Slack accepts several Socket Mode
+connections on the same app token, so a second instance — a laptop left
+running, another machine you were testing on — receives every upload too and
+posts its own reply. You get duplicate answers and a second copy of the decoded
+data in Slack. Stop one before starting the other, or give the second machine
+its own Slack app.
 
 ---
 

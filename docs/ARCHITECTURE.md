@@ -119,9 +119,12 @@ Scale-to-zero looks like the obvious fit for this workload. It isn't.
 | Cold starts | A container carrying OpenCV and Tesseract takes seconds to start, on an interactive path. |
 | Socket Mode | Incompatible with a request-scoped runtime. HTTP mode would mean a public endpoint and signature verification. |
 
-An always-on 512 MB machine has no cold starts, needs no queue, and exposes no
-inbound port. It is simply the less complicated arrangement. If volume ever
-justifies splitting the service, the sidecar boundary is the natural seam.
+A single long-running process has no cold starts, needs no queue, and exposes
+no inbound port. It is simply the less complicated arrangement, and it is what
+lets the whole thing run on one machine its operator controls. Give it around
+512 MB: OpenCV needs headroom to decode a large photograph, and 256 MB is not
+enough. If volume ever justifies splitting the service, the sidecar boundary is
+the natural seam.
 
 ## Extension points
 

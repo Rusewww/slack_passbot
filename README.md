@@ -161,15 +161,20 @@ Create an app at <https://api.slack.com/apps> from `manifest.yml`, then:
    `im:write` and `im:history`.
 4. Under Event Subscriptions, subscribe to `message.im`.
 
-### Deploying
+### Running it continuously
 
-```bash
-fly secrets set SLACK_BOT_TOKEN=xoxb-… SLACK_APP_TOKEN=xapp-…
-fly deploy
-```
+There is no hosted deployment. The bot runs where you start it, and it only
+receives an upload while it is connected, because Socket Mode holds an outbound
+WebSocket rather than accepting inbound requests. Nothing queues events for it
+while it is down.
 
-One 512 MB always-on machine, no public IP, no database, no queue. See
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for why serverless is a worse fit
-here.
+That is a deliberate trade. Keeping the process on a machine you control means
+the image, the decoded fields and the logs never reach a third party's
+infrastructure, which is the whole point of the design in
+[docs/SECURITY.md](docs/SECURITY.md). The cost is that the bot answers only
+while that machine is running.
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for why the process is
+long-running rather than request-scoped.
 
 [icao]: https://www.icao.int/publications/pages/publication.aspx?docnum=9303
