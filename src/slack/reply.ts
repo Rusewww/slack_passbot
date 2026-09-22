@@ -11,39 +11,39 @@ import { buildLabel } from '../buildInfo.js';
 import type { ExtractionFailureReason, ExtractionSuccess } from '../types.js';
 
 const SOURCE_LABEL: Record<ExtractionSuccess['source'], string> = {
-  tesseract: 'direct read',
-  'tesseract+repair': 'read with check-digit correction',
-  'ai-fallback': 'read via vision fallback',
+  tesseract: 'звичайне зчитування',
+  'tesseract+repair': 'зчитано з автоматичним виправленням',
+  'ai-fallback': 'зчитано за допомогою ШІ',
 };
 
 const FAILURE_MESSAGE: Record<ExtractionFailureReason, string> = {
   no_mrz_found:
-    'I could not find a machine readable zone in that image. Make sure the two lines of `<<<` characters along the bottom of the document are fully inside the frame.',
+    'Не вдалося знайти спеціальну зону з даними на цьому фото. Переконайтеся, що два рядки MRZ внизу документа повністю потрапили в кадр.',
   unreadable:
-    'I found the MRZ but could not read it reliably. A flatter angle and more even lighting usually fixes this.',
+    'Рядки з даними знайдено, але зчитати їх не вдалося. Спробуйте інше фото за наявності або ж скопіюйте дані вручну.',
   // Failing check digits do not cause a refusal; a partial reading goes out
   // with a warning instead. This reason means the recogniser could not
   // assemble a reading at all, usually because the name line was too damaged
   // to identify.
   check_digits_failed:
-    'I found the MRZ but could not make out enough of it to report anything. The name line in particular was unreadable. Please retake the photo straight-on, with the whole bottom strip in focus.',
+    'MRZ знайдено, але розібрати їх не вдалося (особливо рядок з іменем). Спробуйте інше фото за наявності або ж скопіюйте дані вручну.',
   name_unreadable:
-    'I read the document number and dates, but nothing on the name line was legible enough to be a name. Rather than report characters I know are wrong, I am reporting nothing. Please retake the photo with the whole bottom strip sharp and evenly lit.',
+    "Номер документа та дати зчитано, але ім'я розібрати складно. Щоб не видати помилковий результат, процес зупинено. Спробуйте інше фото за наявності або ж скопіюйте дані вручну.",
   unsupported_mrz:
-    'I found a machine readable zone, but not in a layout I decode. I read passports (TD3: two lines of 44 characters) and identity cards (TD1: three lines of 30). Visas and older card formats are not supported yet.',
-  unsupported_format: 'That file type is not supported. Send a JPEG, PNG or HEIC photo.',
-  too_large: 'That image is larger than I accept. Send a photo under 10 MB.',
-  ocr_unavailable: 'The recognition service is not responding. This has been logged; try again shortly.',
-  timeout: 'Processing took too long and was stopped. Please try again.',
+    'Машинозчитувану зону знайдено, але цей формат поки не підтримується. Я вмію читати паспорти (два рядки по 44 символи) та ID-картки (три рядки по 30). Візи та старі формати документів наразі не підтримуються.',
+  unsupported_format: 'Цей тип файлу не підтримується. Надішліть фото у форматі JPEG, PNG або HEIC.',
+  too_large: 'Це фото завелике. Надішліть файл розміром до 10 МБ.',
+  ocr_unavailable: 'Сервіс розпізнавання тимчасово не працює. Спробуйте пізніше.',
+  timeout: 'Обробка тривала надто довго й була зупинена. Спробуйте ще раз.',
 };
 
 /** Check digits, in the order they are worth reading about. */
 const CHECKS: ReadonlyArray<{ key: keyof ExtractionSuccess['validation']; label: string }> = [
-  { key: 'documentNumber', label: 'document number' },
-  { key: 'birthDate', label: 'date of birth' },
-  { key: 'expiryDate', label: 'date of expiry' },
-  { key: 'personalNumber', label: 'personal number' },
-  { key: 'composite', label: 'composite' },
+  { key: 'documentNumber', label: 'номер документа' },
+  { key: 'birthDate', label: 'дата народження' },
+  { key: 'expiryDate', label: 'дата завершення строку дії' },
+  { key: 'personalNumber', label: 'особистий номер' },
+  { key: 'composite', label: 'загальна перевірка' },
 ];
 
 /**
@@ -59,6 +59,10 @@ function verificationBreakdown(result: ExtractionSuccess): { verified: string[];
 
   for (const { key, label } of CHECKS) {
     if (key === 'personalNumber' && result.format === 'TD1') continue;
+    // An issuer that does not use the personal number leaves it as filler
+    // with a `<` check digit. That is "not present", and listing it as
+    // verified would claim a check that never ran.
+    if (key === 'personalNumber' && result.fields.personalNumber === '') continue;
     (result.validation[key] ? verified : failed).push(label);
   }
 
@@ -78,7 +82,7 @@ export function successBlocks(result: ExtractionSuccess): KnownBlock[] {
       text: {
         type: 'mrkdwn',
         text: [
-          ':rotating_light: *This reading is suspect beyond what the check digits can tell you.*',
+          ':rotating_light: Здається, дані зчиталися з помилкою, яку не вдалося виправити автоматично. Перевірте перед використанням.',
           ...result.anomalies.map((anomaly) => `• ${anomaly}`),
         ].join('\n'),
       },
@@ -93,8 +97,8 @@ export function successBlocks(result: ExtractionSuccess): KnownBlock[] {
       text: {
         type: 'mrkdwn',
         text: [
-          ':warning: *Some check digits did not verify. Treat this reading as unconfirmed.*',
-          `Failed: *${failed.join(', ')}*. Compare those fields against the document before using them.`,
+          ":warning: Деякі дані не пройшли перевірку. Обов'язково перевірте результат самостійно.",
+          `Не пройшли перевірку: *${failed.join(', ')}*. Звірте ці поля з документом, перш ніж використовувати їх.`,
         ].join('\n'),
       },
     });
@@ -111,7 +115,7 @@ export function successBlocks(result: ExtractionSuccess): KnownBlock[] {
       elements: [
         {
           type: 'mrkdwn',
-          text: `Check digits confirmed for: ${verified.join(', ')}. A confirmed field is exact.`,
+          text: `Успішно перевірено: ${verified.join(', ')}. Ці дані зчитано коректно.`,
         },
       ],
     });
@@ -121,15 +125,18 @@ export function successBlocks(result: ExtractionSuccess): KnownBlock[] {
   // the holder's name a check digit, so it is a best reading even when every
   // other field verifies.
   const status = result.validation.allValid
-    ? 'All check digits verified'
-    : 'Partly verified';
+    ? 'Усі дані успішно перевірено'
+    : 'Перевірено частково';
 
   const context = [
-    `${status} · name never check-digit protected · ${SOURCE_LABEL[result.source]}`,
-    result.edits > 0 ? `${result.edits} character(s) corrected` : null,
-    'Not stored, this message is the only copy.',
+    `${status} · ім'я не перевіряється автоматично · ${SOURCE_LABEL[result.source]}`,
+    // Phrased as "corrected characters: N" rather than "N characters
+    // corrected" on purpose: Ukrainian has three plural forms (1 / 2-4 / 5+),
+    // and this word order is correct for every number without plural logic.
+    result.edits > 0 ? `автоматично виправлено символів: ${result.edits}` : null,
+    'Не зберігається — це повідомлення є єдиною копією.',
     // So a stale binary announces itself instead of being blamed on the code.
-    `build ${buildLabel()}`,
+    `версія ${buildLabel()}`,
   ]
     .filter(Boolean)
     .join(' · ');
@@ -154,18 +161,18 @@ export function rateLimitedBlocks(): KnownBlock[] {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: 'You are sending images faster than I can process them. Give it a minute and try again.',
+        text: 'Ви надсилаєте фото занадто швидко. Зачекайте хвилинку і спробуйте ще раз.',
       },
     },
   ];
 }
 
 export const HELP_TEXT = [
-  '*passbot* reads the machine readable zone from a passport photo.',
+  'passbot допомагає зчитувати дані з фотографій паспортів.',
   '',
-  'Send me a photo *in this direct message*, including the two lines of `<<<` characters',
-  'along the bottom of the document, shot straight-on and in focus.',
+  'Надішліть фото сюди, в особисті повідомлення. Переконайтеся, що камера розташована рівно,',
+  'текст у фокусі, а два нижні рядки із символами MRZ повністю потрапили в кадр.',
   '',
-  'I reply with the decoded string and nothing else: the image is processed in memory,',
-  'never written to disk, and never stored or logged.',
+  'У відповідь ви отримаєте лише зчитаний текст: фото обробляється миттєво,',
+  'ніде не зберігається і не залишається на сервері.',
 ].join('\n');

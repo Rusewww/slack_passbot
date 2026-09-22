@@ -91,4 +91,32 @@ describe('adjudicate: no usable reading', () => {
   it('returns null when the pool holds nothing MRZ-shaped', () => {
     expect(adjudicate([variant('bottom:grey', '14KOBOCT25<4652', 'L')]).winner).toBeNull();
   });
+
+  it('does not promote line 1 into the line-2 slot when line 2 is unreadable', () => {
+    // The lower line was cut off or too damaged to read, so the pool holds
+    // only line 1. It is 44 characters, so it is a candidate line 2, and its
+    // name characters would become the document number and the dates. That
+    // reading went out once, labelled partly verified, because its filler
+    // landed in the check-digit slots. Nothing mandatory proves, so nothing
+    // is delivered, and the failure is reported as unreadable rather than as
+    // a name problem.
+    const { winner, nameFailed } = adjudicate([variant('located:otsu', LINE_1)]);
+
+    expect(winner).toBeNull();
+    expect(nameFailed).toBe(false);
+  });
+
+  it('still delivers a partial reading that proves a mandatory field', () => {
+    // The guard above must not swallow genuine partials: here the stated
+    // expiry check digit is wrong and unrepairable, but the document number
+    // and date of birth prove out, so the reading is delivered with both
+    // outcomes stated.
+    const partial = LINE_2.slice(0, 27) + '1' + LINE_2.slice(28);
+    const { winner } = adjudicate([variant('located:otsu', LINE_1, partial)]);
+
+    expect(winner).not.toBeNull();
+    expect(winner?.parsed.validation.documentNumber).toBe(true);
+    expect(winner?.parsed.validation.birthDate).toBe(true);
+    expect(winner?.parsed.validation.expiryDate).toBe(false);
+  });
 });

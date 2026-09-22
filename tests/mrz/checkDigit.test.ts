@@ -43,8 +43,19 @@ describe('verifyCheckDigit', () => {
     expect(verifyCheckDigit('910824', '3')).toBe(false);
   });
 
-  it('treats a filler check digit as "not provided"', () => {
-    expect(verifyCheckDigit('<<<<<<<<<<<<<<', '<')).toBe(true);
+  it('accepts a filler check digit only for a field declared optional', () => {
+    // The personal number may be left unused, in which case ICAO 9303 Part 4
+    // permits `<` in its check-digit slot. No other field gets that latitude.
+    expect(verifyCheckDigit('<<<<<<<<<<<<<<', '<', true)).toBe(true);
+  });
+
+  it('rejects a filler check digit on a mandatory field', () => {
+    // A `<` where a date's check digit belongs is not "not provided"; it is
+    // evidence the line is not a line 2 at all. This is exactly how line 1,
+    // parsed as line 2, once had a fragment of the holder's name accepted as
+    // a verified expiry date.
+    expect(verifyCheckDigit('NA<<<<', '<')).toBe(false);
+    expect(verifyCheckDigit('<<<<<<<<<<<<<<', '<')).toBe(false);
   });
 
   it('rejects a non-numeric stated digit', () => {

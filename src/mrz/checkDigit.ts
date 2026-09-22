@@ -54,11 +54,19 @@ export function computeCheckDigit(input: string): number {
 /**
  * Verifies a field against its stated check digit.
  *
- * A `<` check digit means "not provided", which is legal for optional fields
- * like the personal number. There is nothing to verify in that case.
+ * A `<` in the check-digit position means "not provided". ICAO 9303 permits
+ * that for exactly one TD3 field, the optional personal number (Part 4, field
+ * 10/II), and callers say so with `optional`. For every other field a `<`
+ * there is not a pass but proof the line is not what it is being read as.
+ *
+ * This used to return true for `<` unconditionally. The consequence: when
+ * line 2 was unreadable, line 1 could be parsed *as* line 2, and because line
+ * 1 is mostly filler its date slots landed on `<` and "verified". A reading
+ * whose expiry date was a fragment of the holder's name went out labelled
+ * partly confirmed.
  */
-export function verifyCheckDigit(input: string, stated: string): boolean {
-  if (stated === '<') return true;
+export function verifyCheckDigit(input: string, stated: string, optional = false): boolean {
+  if (stated === '<') return optional;
   if (stated.length !== 1 || stated < '0' || stated > '9') return false;
   try {
     return computeCheckDigit(input) === Number(stated);

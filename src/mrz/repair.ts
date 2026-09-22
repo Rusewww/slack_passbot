@@ -264,6 +264,24 @@ export function countVerified(validation: MrzValidation): number {
 }
 
 /**
+ * Whether a reading proves at least one *mandatory* field: the document
+ * number, the date of birth or the date of expiry.
+ *
+ * This is the bar a best-effort reading has to clear before it is delivered.
+ * `countVerified` is the wrong gate for that, because it counts the personal
+ * number, and that field passes on an absent check digit (`<`) by design.
+ * A line with nothing provable at all could therefore score 1 and go out
+ * labelled "partly verified". In practice the line that did so was line 1,
+ * read as line 2 when the real line 2 was unreadable: its name characters
+ * became the dates, and its filler became passing check digits.
+ *
+ * Ranking between readings that clear this bar still uses `countVerified`.
+ */
+export function provesMandatoryField(validation: MrzValidation): boolean {
+  return validation.documentNumber || validation.birthDate || validation.expiryDate;
+}
+
+/**
  * Salvages what can be proven from a line 2 that will not fully validate.
  *
  * `repairLine2` is all-or-nothing: it returns a reading only when every check

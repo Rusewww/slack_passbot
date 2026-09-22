@@ -64,7 +64,7 @@ export async function handleImageUpload(
 
   if (!rateLimiter.tryConsume(event.userId)) {
     log.warn('user rate limited');
-    await postPrivate(ctx, event, rateLimitedBlocks(), 'Rate limited');
+    await postPrivate(ctx, event, rateLimitedBlocks(), 'Забагато запитів');
     return;
   }
 
@@ -129,7 +129,7 @@ async function processOne(
         ctx,
         event,
         result.ok ? successBlocks(result) : failureBlocks(result.reason),
-        result.ok ? 'MRZ decoded' : 'Could not decode MRZ',
+        result.ok ? 'Дані успішно зчитано' : 'Не вдалося зчитати дані',
       );
     });
   } catch (error) {
@@ -151,7 +151,7 @@ async function reportError(
       ctx,
       event,
       failureBlocks(error.code === 'too_large' ? 'too_large' : 'unsupported_format'),
-      'Upload rejected',
+      'Файл не прийнято',
     );
     return;
   }
@@ -166,7 +166,7 @@ async function reportError(
     { err: error instanceof Error ? error.message : 'unknown error' },
     'unhandled failure while processing upload',
   );
-  await postPrivate(ctx, event, failureBlocks('unreadable'), 'Processing failed');
+  await postPrivate(ctx, event, failureBlocks('unreadable'), 'Помилка обробки');
 }
 
 /**

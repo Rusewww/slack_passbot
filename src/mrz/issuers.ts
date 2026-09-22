@@ -40,14 +40,14 @@ export const DOCUMENT_NUMBER_RULES: readonly DocumentNumberRule[] = [
     format: 'TD3',
     length: 8,
     pattern: /^[A-Z]{2}\d{6}$/,
-    description: 'two letters followed by six digits',
+    description: 'дві літери, за якими йдуть шість цифр',
   },
   {
     issuingState: 'UKR',
     format: 'TD1',
     length: 9,
     pattern: /^\d{9}$/,
-    description: 'nine digits',
+    description: "дев'ять цифр",
   },
 ];
 

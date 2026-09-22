@@ -5,6 +5,7 @@ import {
   bestEffortLine2,
   bestEffortTd1Lines,
   countVerified,
+  provesMandatoryField,
   repairLine2,
 } from '../../src/mrz/repair.js';
 import { parseTd3 } from '../../src/mrz/td3.js';
@@ -67,6 +68,24 @@ describe('bestEffortLine2', () => {
 
   it('rejects a line of the wrong length', () => {
     expect(bestEffortLine2(SPECIMEN_LINE_2.slice(0, 40))).toBeNull();
+  });
+});
+
+describe('provesMandatoryField', () => {
+  it('holds when any mandatory field verifies, even with others broken', () => {
+    expect(provesMandatoryField(bestEffortLine2(UNRECONCILABLE)!.validation)).toBe(true);
+  });
+
+  it('does not hold for line 1 read as line 2', () => {
+    // Line 1 is a well-formed 44-character MRZ line, so bestEffortLine2 has
+    // no reason to refuse it. Its name characters land in the date slots and
+    // its filler in the check-digit slots. Before `<` was confined to the
+    // optional personal number, two of those "verified" and this reading was
+    // delivered as partly confirmed. Nothing mandatory proves; it must not be.
+    const attempt = bestEffortLine2(SPECIMEN_LINE_1);
+
+    expect(attempt).not.toBeNull();
+    expect(provesMandatoryField(attempt!.validation)).toBe(false);
   });
 });
 

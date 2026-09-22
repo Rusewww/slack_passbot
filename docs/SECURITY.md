@@ -25,7 +25,7 @@ Every control below follows from that.
 | Malicious file disguised as an image | Type from magic bytes, not filename or reported MIME; SVG and PDF refused | `security/imageGuards.ts` |
 | Decompression bomb | Byte cap before download completes; pixel budget checked at decode | `slack/download.ts`, `ocr/preprocess.py` |
 | Resource exhaustion | Per-user rate limit, bounded job queue, capped repair search | `security/rateLimit.ts`, `mrz/repair.ts` |
-| Inbound network attack | Socket Mode, so no listening port and no public IP | `slack/app.ts`, `fly.toml` |
+| Inbound network attack | Socket Mode, so no listening port and no public IP | `slack/app.ts` |
 | Sidecar reached from outside | Bound to `127.0.0.1`; never published | `docker/entrypoint.sh` |
 | Wrong data reported as correct | Check digits verified on every path, including the AI fallback | `mrz/td3.ts`, `pipeline/extract.ts` |
 | Data leaves the perimeter unnoticed | AI fallback off by default; config refuses to start half-configured | `config.ts` |
