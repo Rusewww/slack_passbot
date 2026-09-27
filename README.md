@@ -178,3 +178,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for why the process is
 long-running rather than request-scoped.
 
 [icao]: https://www.icao.int/publications/pages/publication.aspx?docnum=9303
+
+## Background
+
+I first built this tool at work for a concierge team. This repository is my independent public re-implementation, improved since then.
