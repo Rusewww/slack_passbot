@@ -13,6 +13,10 @@ date of birth, sex, date of expiry, surname, given names.
 > The fourth field is the ICAO nationality code. No MRZ encodes place of birth;
 > that appears only in the visual zone of the document.
 
+## Background
+
+I first built this tool at work for a concierge team. This repository is my independent public re-implementation, improved since then.
+
 ## How it works
 
 The MRZ is not free-form text. It is a fixed [ICAO 9303][icao] layout in OCR-B,
@@ -178,7 +182,3 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for why the process is
 long-running rather than request-scoped.
 
 [icao]: https://www.icao.int/publications/pages/publication.aspx?docnum=9303
-
-## Background
-
-I first built this tool at work for a concierge team. This repository is my independent public re-implementation, improved since then.
